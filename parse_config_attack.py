@@ -36,10 +36,11 @@ def parse_config(config_file):
 
     return config_params
 
-if __name__ == "__main__":
-    if len(sys.argv) < 1:
-        print('No config file provided. Usage: python parse_config_attack.py <name_of_config_file>')
-        exit(1)
-    else:
-        config_file = sys.argv[1]
-        config_params = parse_config(config_file) 
+#if __name__ == "__main__":
+#    if len(sys.argv) < 1:
+#        print('No config file provided. Usage: python parse_config_attack.py <name_of_config_file>')
+#        exit(1)
+#    else:
+#        config_file = sys.argv[1]
+#        config_params = parse_config(config_file) 
+#        print(config_params)
