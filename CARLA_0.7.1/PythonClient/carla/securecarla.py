@@ -18,6 +18,9 @@ from . import image_converter
 import logging
 import numpy as np
 import time
+import sys
+import configparser
+import os.path
 
 try:
     from . import carla_server_pb2 as carla_protocol
@@ -26,9 +29,50 @@ except ImportError:
 
 
 class SecureCarla(object):
-    def __init__(self):
-	#Need to load the variance and mean parameters here 
-	return
+    def __init__(self, config_file=None):
+	
+        # Load variance, mean, and offset parameters here:
+        # Parse config file if config file provided 
+        
+        if config_file is not None:
+            self.config_params = parse_config(config_file)
+
+        return
+        
+    def parse_config(config_file):
+
+        config_params = {}
+        
+        # Initialize config parser object
+        config = configparser.ConfigParser()
+
+        if not os.path.isfile(config_file):
+            print('Cannot find', config_file+'. ', 'Exiting now.')
+            exit(-1)
+        else:
+            # Read and parse config file
+            config.read(config_file)
+            
+            # Read config params into dict
+            config_params['meas_default'] = dict(config.items('meas_default'))
+            config_params['meas'] = dict(config.items('meas'))
+            config_params['environment'] = dict(config.items('environment'))
+            config_params['camera_rgb'] = dict(config.items('camera_rgb'))
+            
+            # Convert string values to numeric
+            config_params['meas_default'] = {key:float(val) for key, val in config_params['meas_default'].items()}
+            config_params['meas'] = {key:float(val) for key, val in config_params['meas'].items()}
+            config_params['environment'] = {key:float(val) for key, val in config_params['environment'].items()}
+            config_params['camera_rgb'] = {key:float(val) for key, val in config_params['camera_rgb'].items()}
+            
+            # Print configuration parameters loaded
+            print('Finished loading configs:')
+            for key in config_params.keys():
+                print('---',key,'---')
+                print(config_params[key])
+
+        return config_params
+
 
     def add_location_noise(self, agent, mean, var):
 	agent.transform.location.x = agent.transform.location.x + np.random.normal(mean,var)
