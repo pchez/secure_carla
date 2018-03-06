@@ -1,4 +1,3 @@
-from __future__ import print_function
 import configparser
 import sys
 import os.path
@@ -18,17 +17,11 @@ def parse_config(config_file):
         # Read and parse config file
         config.read(config_file)
         
-        # Read config params into dict
-        config_params['meas_default'] = dict(config.items('meas_default'))
-        config_params['meas'] = dict(config.items('meas'))
-        config_params['environment'] = dict(config.items('environment'))
-        config_params['camera_rgb'] = dict(config.items('camera_rgb'))
-        
-        # Convert string values to numeric
-        config_params['meas_default'] = {key:float(val) for key, val in config_params['meas_default'].items()}
-        config_params['meas'] = {key:float(val) for key, val in config_params['meas'].items()}
-        config_params['environment'] = {key:float(val) for key, val in config_params['environment'].items()}
-        config_params['camera_rgb'] = {key:float(val) for key, val in config_params['camera_rgb'].items()}
+        for config_key in config.items():
+            if config_key[0] == 'DEFAULT':
+                continue
+            config_params[config_key[0]] = dict(config.items(config_key[0]))
+            config_params[config_key[0]] = {key:float(val) for key, val in config_params[config_key[0]].items()}
         
         # Print configuration parameters loaded
         print('Finished loading configs:')
