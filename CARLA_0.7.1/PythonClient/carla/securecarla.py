@@ -28,6 +28,7 @@ except ImportError:
 class SecureCarla(object):
     def __init__(self):
 	#Need to load the variance and mean parameters here 
+	self.wait_counter = 0
 	return
 
     def add_location_noise(self, agent, mean, var):
@@ -127,40 +128,30 @@ class SecureCarla(object):
 			logging.info('z = %f ',a.pedestrian.transform.location.z)
 			break
 	'''
-	#print(len(sensor_data['CameraRGB'].raw_data))
-	#sensor_data['CameraRGB'].data = sensor_data['CameraRGB'].data + np.random.normal(0,10,size=sensor_data['CameraRGB'].data.shape)
-	#sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_images/camera_outputs/0000.png")
-	#print("Done")
-	#time.sleep(5)
-	#print(sensor_data['CameraRGB'].data.shape)
-	converted_data = image_converter.to_rgb_array(sensor_data['CameraRGB'])
 
 	image = sensor_data['CameraRGB']
 	array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
 	array = np.reshape(array, (image.height, image.width, 4))
-	#The data is in ABGR format at the moment
+
+	#Noise injection
 	noise = np.random.randint(0,130,array.shape,dtype=np.dtype("uint8"))
-	#print noise[0:10,0:10,:]
-	#print type(noise[0,0,0])
-	#print type(array[0,0,0])
 	#array = array + noise
+
+	#Block injection
 	array.setflags(write=1)
-	array[150:250,350:450,:] = 0
-	#for x in range(100,200):
-	  #    array[x,100:200] = 0
-	#print array.shape
+	#array[125:375,325:475,:] = 0
+
+	#Serialize the data
 	array = np.reshape(array, (image.height*image.width*4))
-	
-	#array = array[:, :, :3]
-    	#array = array[:, :, ::-1]
-	#print array.shape
 	array = array.tostring()
-	print len(array)
-	print array == sensor_data['CameraRGB'].raw_data 
 	sensor_data['CameraRGB'].raw_data = array
-	#sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_images/camera_outputs/block.png")
-	#print("Done")
-	#time.sleep(5)
+	
+	#self.wait_counter = self.wait_counter + 1
+	#print self.wait_counter
+	if self.wait_counter >= 50:
+		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_images/camera_outputs/block.png")
+		print("Done")
+		time.sleep(5)
 	return measurements, sensor_data
 	
 
