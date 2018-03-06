@@ -19,13 +19,15 @@ def parse_config(config_file):
         config.read(config_file)
         
         # Read config params into dict
-        config_params['sensors_default'] = dict(config.items('sensors_default'))
-        config_params['sensors'] = dict(config.items('sensors'))
+        config_params['meas_default'] = dict(config.items('meas_default'))
+        config_params['meas'] = dict(config.items('meas'))
+        config_params['environment'] = dict(config.items('environment'))
         config_params['camera_rgb'] = dict(config.items('camera_rgb'))
-
+        
         # Convert string values to numeric
-        config_params['sensors_default'] = {key:float(val) for key, val in config_params['sensors_default'].items()}
-        config_params['sensors'] = {key:float(val) for key, val in config_params['sensors'].items()}
+        config_params['meas_default'] = {key:float(val) for key, val in config_params['meas_default'].items()}
+        config_params['meas'] = {key:float(val) for key, val in config_params['meas'].items()}
+        config_params['environment'] = {key:float(val) for key, val in config_params['environment'].items()}
         config_params['camera_rgb'] = {key:float(val) for key, val in config_params['camera_rgb'].items()}
         
         # Print configuration parameters loaded
@@ -43,4 +45,4 @@ def parse_config(config_file):
 #    else:
 #        config_file = sys.argv[1]
 #        config_params = parse_config(config_file) 
-#        print(config_params)
+#        #print(config_params)
