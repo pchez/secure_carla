@@ -92,7 +92,7 @@ class Benchmark(object):
             target,
             episode_name):
 
-        measurements, sensor_data = carla.read_data()
+        measurements, sensor_data = carla.read_data(adversarial=True)
         carla.send_control(VehicleControl())
 
         t0 = measurements.game_timestamp
@@ -103,7 +103,7 @@ class Benchmark(object):
         distance = 10000
 
         while(t1 - t0) < (time_out * 1000) and not success:
-            measurements, sensor_data = carla.read_data()
+            measurements, sensor_data = carla.read_data(adversarial=True)
 
             control = agent.run_step(measurements, sensor_data, target)
 
