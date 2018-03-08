@@ -70,63 +70,89 @@ class SecureCarla(object):
 
         return config_params
 
+    def get_distance_to_agent(self, player, agent):
+        distance = np.sqrt((player.transform.location.x - agent.transform.location.x)**2 + (player.transform.location.y - agent.transform.location.y)**2 + (player.transform.location.z - agent.transform.location.z)**2)
 
-    def add_location_noise(self, agent, mean, var):
-        agent.transform.location.x = agent.transform.location.x + np.random.normal(mean,var)
-	agent.transform.location.y = agent.transform.location.y + np.random.normal(mean,var)
-	agent.transform.location.z = agent.transform.location.z + np.random.normal(mean,var)
-    
-    def add_rotation_noise(self, agent, mean, var):
-	agent.transform.rotation.pitch = agent.transform.rotation.pitch + np.random.normal(mean,var)
-	agent.transform.rotation.yaw = agent.transform.rotation.yaw + np.random.normal(mean,var)
-	agent.transform.rotation.roll = agent.transform.rotation.roll + np.random.normal(mean,var)
-    
-    def add_transform_noise(self, agent, lmean, lvar, rmean, rvar):
-	self.add_location_noise(agent, lmean, lvar)
-	self.add_rotation_noise(agent, rmean, rvar)
+        return distance
 
-    def add_acceleration_noise(self, agent):
-        agent.acceleration.x = agent.acceleration.x + np.random.normal(mean,var)
-	agent.acceleration.y = agent.acceleration.y + np.random.normal(mean,var)
-	agent.acceleration.z = agent.acceleration.z + np.random.normal(mean,var)
+    # Returns the distance value under noise and attack 
+    def distance_attack(self, agent, player=None, this_config):
+        use_gaussian = int(this_config['use_gaussian_noise'])
+        if use_gaussian:
+            noise = np.random.normal(this_config['dist_noise_mean'], this_config['dist_noise_var'])
+        else:
+            noise = np.random.uniform(this_config['dist_noise_low'], this_config['dist_noise_low']) 
 
-    def add_box_extent_noise(self, agent, mean, var):
-	agent.box_extent.x = agent.box_extent.x + np.random.normal(mean,var)
-	agent.box_extent.y = agent.box_extent.y + np.random.normal(mean,var)
-	agent.box_extent.z = agent.box_extent.z + np.random.normal(mean,var)
+        use_attack = int(this_config['use_attack'])
+        if use_attack:
+            attack = np.random.normal(this_config['dist_attack_mean'], this_config['dist_attack_var'])
+        else:
+            attack = 0
 
-    def add_speed_noise(self, agent, mean, var):
-	agent.forward_speed = agent.forward_speed + np.random.normal(mean,var)
+        distance = get_distance_to_agent(agent, player)
+	distance = distance + noise + attack 
 
-    def traffic_light_inject(self, agent):
+    # Modifies the accel value of the agent/player with noise and attack
+    def accel_attack(self, agent, this_config):
+        use_gaussian = int(this_config['use_gaussian_noise'])
+        if use_gaussian:
+            noise = np.random.normal(this_config['acceel_noise_mean'], this_config['accel_noise_var'])
+        else:
+            noise = np.random.uniform(this_config['accel_noise_low'], this_config['accel_noise_low']) 
+        
+        use_attack = int(this_config['use_attack'])
+        if use_attack:
+            attack = np.random.normal(this_config['accel_attack_mean'], this_config['accel_attack_var'])
+        else:
+            attack = 0
+        
+        agent.acceleration.x = agent.acceleration.x + noise + attack
+	agent.acceleration.y = agent.acceleration.y + noise + attack
+	agent.acceleration.z = agent.acceleration.z + noise + attack
+
+    # Modifies the forward speed value of the agent/player with noise and attack
+    def speed_attack(self, agent, this_config):
+        use_gaussian = int(this_config['use_gaussian_noise'])
+	if use_gaussian:
+            noise = np.random.normal(this_config['speed_noise_mean'], this_config['speed_noise_var'])
+        else:
+            noise = np.random.uniform(this_config['speed_noise_low'], this_config['speed_noise_low']) 
+        
+        use_attack = int(this_config['use_attack'])
+        if use_attack:
+            attack = np.random.normal(this_config['speed_attack_mean'], this_config['speed_attack_var'])
+        else:
+            attack = 0
+
+        agent.forward_speed = agent.forward_speed + noise + attack
+
+    def traffic_light_inject(self, agent, player):
         this_config = self.config['trafficlight']
-	self.add_transform_noise(agent.traffic_light, this_config['location_mean'], this_config['location_var'], this_config['rotation_mean'], this_config['rotation_var'])
+	self.distance_attack(agent.traffic_light, player, this_config)
 
-    def speed_limit_sign_inject(self, agent):
+    def speed_limit_sign_inject(self, agent, player):
         this_config = self.config['speedlimit']
-	self.add_transform_noise(agent.speed_limit_sign, this_config['location_mean'], this_config['location_var'], this_config['rotation_mean'], this_config['rotation_var'])
+	self.distance_attack(agent.speed_limit_sign, player, this_config)
 
-    def vehicle_inject(self, agent):
+    def vehicle_inject(self, agent, player):
         this_config = self.config['vehicle']
-	self.add_transform_noise(agent.vehicle, this_config['location_mean'], this_config['location_var'], this_config['rotation_mean'], this_config['rotation_var'])
-	self.add_box_extent_noise(agent.vehicle,0,10)
-	self.add_speed_noise(agent.vehicle,this_config['speed_mean'],this_config['speed_var'])
+	self.distance_attack(agent.vehicle, player, this_config)
+	self.speed_attack(agent.vehicle, this_config)
 
-    def pedestrian_inject(self, agent):
+    def pedestrian_inject(self, agent, player):
         this_config = self.config['pedestrian']
-	self.add_transform_noise(agent.pedestrian, this_config['location_mean'], this_config['location_var'], this_config['rotation_mean'], this_config['rotation_var'])
-	self.add_box_extent_noise(agent.pedestrian,0,10)
-	self.add_speed_noise(agent.pedestrian,this_config['speed_mean'],this_config['speed_var'])
+	self.distance_attack(agent.pedestrian, player, this_config)
+	self.speed_attack(agent.pedestrian, this_config)
 
-    def agent_inject(self, agent_type, agent):
+    def agent_inject(self, player, agent_type, agent):
 	if(agent_type == 'traffic_light'):
-		self.traffic_light_inject(agent)
+		self.traffic_light_inject(agent, player)
 	elif(agent_type == 'speed_limit_sign'):
-		self.speed_limit_sign_inject(agent)
+		self.speed_limit_sign_inject(agent, player)
 	elif(agent_type == 'vehicle'):
-		self.vehicle_inject(agent)
+		self.vehicle_inject(agent, player)
 	elif(agent_type == 'pedestrian'):
-		self.pedestrian_inject(agent)
+		self.pedestrian_inject(agent, player)
 	#agents ={
 	#	'traffic_light' : self.traffic_light_inject(agent),
 	#	'speed_limit_sign' : self.speed_limit_sign_inject(agent),
@@ -137,9 +163,8 @@ class SecureCarla(object):
 
     def player_inject(self, player):
 	this_config = self.config['player']
-        self.add_transform_noise(player, this_config['location_mean'], this_config['location_var'], this_config['rotation_mean'], this_config['rotation_var'])
-	self.add_acceleration_noise(player,this_config['accel_mean'],this_config['accel_var'])
-	self.add_speed_noise(player,this_config['speed_mean'],this_config['speed_var'])
+	self.accel_attack(player, this_config)
+	self.speed_attack(player, this_config)
 
     def inject_adversarial(self,measurements, sensor_data):
 	'''
@@ -204,15 +229,14 @@ class SecureCarla(object):
 	print len(array)
 	print array == sensor_data['CameraRGB'].raw_data 
 	sensor_data['CameraRGB'].raw_data = array
+    
     def vehicle_inject(self, agent):
-	self.add_transform_noise(agent.vehicle, 0, 10)
-	self.add_box_extent_noise(agent.vehicle,0,10)
-	self.add_speed_noise(agent.vehicle,0,5)
+	self.distance_attack(agent.vehicle, 0, 10)
+	self.speed_attack(agent.vehicle,0,5)
 
     def pedestrian_inject(self, agent):
-	self.add_transform_noise(agent.pedestrian, 0, 10)
-	self.add_box_extent_noise(agent.pedestrian,0,10)
-	self.add_speed_noise(agent.pedestrian,0,5)
+	self.distance_attack(agent.pedestrian, 0, 10)
+	self.speed_attack(agent.pedestrian,0,5)
 
     def agent_inject(self, agent_type, agent):
 	if(agent_type == 'traffic_light'):
@@ -232,9 +256,9 @@ class SecureCarla(object):
 	#print(agents[agent_type](agent))
 
     def player_inject(self, player):
-	self.add_transform_noise(player,0,10)
-	self.add_acceleration_noise(player,0,1)
-	self.add_speed_noise(player,0,5)
+	self.distance_attack(player,0,10)
+	self.accel_attack(player,0,1)
+	self.speed_attack(player,0,5)
 
     def inject_adversarial(self,measurements, sensor_data):
 	logging.info("Measurement Values:")
