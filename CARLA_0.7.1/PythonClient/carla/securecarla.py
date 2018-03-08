@@ -76,7 +76,7 @@ class SecureCarla(object):
         return distance
 
     # Returns the distance value under noise and attack 
-    def distance_attack(self, agent, player=None, this_config):
+    def distance_attack(self, this_config, agent, player=None):
         use_gaussian = int(this_config['use_gaussian_noise'])
         if use_gaussian:
             noise = np.random.normal(this_config['dist_noise_mean'], this_config['dist_noise_var'])
@@ -93,7 +93,7 @@ class SecureCarla(object):
 	distance = distance + noise + attack 
 
     # Modifies the accel value of the agent/player with noise and attack
-    def accel_attack(self, agent, this_config):
+    def accel_attack(self, this_config, agent):
         use_gaussian = int(this_config['use_gaussian_noise'])
         if use_gaussian:
             noise = np.random.normal(this_config['acceel_noise_mean'], this_config['accel_noise_var'])
@@ -111,7 +111,7 @@ class SecureCarla(object):
 	agent.acceleration.z = agent.acceleration.z + noise + attack
 
     # Modifies the forward speed value of the agent/player with noise and attack
-    def speed_attack(self, agent, this_config):
+    def speed_attack(self, this_config, agent):
         use_gaussian = int(this_config['use_gaussian_noise'])
 	if use_gaussian:
             noise = np.random.normal(this_config['speed_noise_mean'], this_config['speed_noise_var'])
@@ -128,21 +128,21 @@ class SecureCarla(object):
 
     def traffic_light_inject(self, agent, player):
         this_config = self.config['trafficlight']
-	self.distance_attack(agent.traffic_light, player, this_config)
+	self.distance_attack(this_config, agent.traffic_light, player)
 
     def speed_limit_sign_inject(self, agent, player):
         this_config = self.config['speedlimit']
-	self.distance_attack(agent.speed_limit_sign, player, this_config)
+	self.distance_attack(this_config, agent.speed_limit_sign, player)
 
     def vehicle_inject(self, agent, player):
         this_config = self.config['vehicle']
-	self.distance_attack(agent.vehicle, player, this_config)
-	self.speed_attack(agent.vehicle, this_config)
+	self.distance_attack(this_config, agent.vehicle, player)
+	self.speed_attack(this_config, agent.vehicle)
 
     def pedestrian_inject(self, agent, player):
         this_config = self.config['pedestrian']
-	self.distance_attack(agent.pedestrian, player, this_config)
-	self.speed_attack(agent.pedestrian, this_config)
+	self.distance_attack(this_config, agent.pedestrian, player)
+	self.speed_attack(this_config, agent.pedestrian)
 
     def agent_inject(self, player, agent_type, agent):
 	if(agent_type == 'traffic_light'):
@@ -163,8 +163,8 @@ class SecureCarla(object):
 
     def player_inject(self, player):
 	this_config = self.config['player']
-	self.accel_attack(player, this_config)
-	self.speed_attack(player, this_config)
+	self.accel_attack(this_config, player)
+	self.speed_attack(this_config, player)
 
     def inject_adversarial(self,measurements, sensor_data):
 	'''
