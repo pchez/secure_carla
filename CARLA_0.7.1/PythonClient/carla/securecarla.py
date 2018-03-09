@@ -198,97 +198,10 @@ class SecureCarla(object):
                     logging.info('z = %f ',a.pedestrian.transform.location.z)
                     break
         
-    def inject_adversarial(self,measurements, sensor_data):
-	
-        #Inject noise into the player measurements
-        self.player_inject(measurements.player_measurements)
-        log_measurements(self, PLAYER_ALL)
-
-        #print(len(sensor_data['CameraRGB'].raw_data))
-	#sensor_data['CameraRGB'].data = sensor_data['CameraRGB'].data + np.random.normal(0,10,size=sensor_data['CameraRGB'].data.shape)
-	#sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_images/camera_outputs/0000.png")
-	#print("Done")
-	#time.sleep(5)
-	#print(sensor_data['CameraRGB'].data.shape)
-	converted_data = image_converter.to_rgb_array(sensor_data['CameraRGB'])
-
-	image = sensor_data['CameraRGB']
-	array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
-	array = np.reshape(array, (image.height, image.width, 4))
-	#The data is in ABGR format at the moment
-	noise = np.random.randint(0,130,array.shape,dtype=np.dtype("uint8"))
-	#print noise[0:10,0:10,:]
-	#print type(noise[0,0,0])
-	#print type(array[0,0,0])
-	#array = array + noise
-	array.setflags(write=1)
-	array[150:250,350:450,:] = 0
-	#for x in range(100,200):
-	  #    array[x,100:200] = 0
-	#print array.shape
-	array = np.reshape(array, (image.height*image.width*4))
-	
-	#array = array[:, :, :3]
-    	#array = array[:, :, ::-1]
-	#print array.shape
-	array = array.tostring()
-	print len(array)
-	print array == sensor_data['CameraRGB'].raw_data 
-	sensor_data['CameraRGB'].raw_data = array
-    
-    def vehicle_inject(self, agent):
 	self.distance_attack(agent.vehicle, 0, 10)
 	self.speed_attack(agent.vehicle,0,5)
 
-    def pedestrian_inject(self, agent):
-	self.distance_attack(agent.pedestrian, 0, 10)
-	self.speed_attack(agent.pedestrian,0,5)
 
-    def agent_inject(self, agent_type, agent):
-	if(agent_type == 'traffic_light'):
-		self.traffic_light_inject(agent)
-	elif(agent_type == 'speed_limit_sign'):
-		self.speed_limit_sign_inject(agent)
-	elif(agent_type == 'vehicle'):
-		self.vehicle_inject(agent)
-	elif(agent_type == 'pedestrian'):
-		self.pedestrian_inject(agent)
-	#agents ={
-	#	'traffic_light' : self.traffic_light_inject(agent),
-	#	'speed_limit_sign' : self.speed_limit_sign_inject(agent),
-	#	'vehicle' : self.vehicle_inject(agent),
-	#	'pedestrian' : self.pedestrian_inject(agent)}[agent_type](agent
-
-	#print(agents[agent_type](agent))
-
-    def player_inject(self, player):
-	self.distance_attack(player,0,10)
-	self.accel_attack(player,0,1)
-	self.speed_attack(player,0,5)
-
-    def log_measurements(self, mode):
-        if mode == PLAYER_ALL:
-            
-            logging.info("Measurement Values:")
-            logging.info('Speed = %f ',measurements.player_measurements.forward_speed)
-            logging.info('Accel = %f ',measurements.player_measurements.acceleration.x)
-            logging.info('x = %f ',measurements.player_measurements.transform.location.x)
-            logging.info('y = %f ',measurements.player_measurements.transform.location.y)
-            logging.info('z = %f ',measurements.player_measurements.transform.location.z)
-            logging.info('pitch = %f ',measurements.player_measurements.transform.rotation.pitch)
-            logging.info('yaw = %f ',measurements.player_measurements.transform.rotation.yaw)
-            logging.info('roll = %f ',measurements.player_measurements.transform.rotation.roll)
-        
-            logging.info("Aversarial Measurement Values:")
-            logging.info('Speed = %f ',measurements.player_measurements.forward_speed)
-            logging.info('Accel = %f ',measurements.player_measurements.acceleration.x)
-            logging.info('x = %f ',measurements.player_measurements.transform.location.x)
-            logging.info('y = %f ',measurements.player_measurements.transform.location.y)
-            logging.info('z = %f ',measurements.player_measurements.transform.location.z)
-            logging.info('pitch = %f ',measurements.player_measurements.transform.rotation.pitch)
-            logging.info('yaw = %f ',measurements.player_measurements.transform.rotation.yaw)
-            logging.info('roll = %f ',measurements.player_measurements.transform.rotation.roll)
-        elif mode == PLAYER_MEAS:
 
     def inject_adversarial(self,measurements, sensor_data):
 	
