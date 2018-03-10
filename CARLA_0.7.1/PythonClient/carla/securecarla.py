@@ -22,8 +22,6 @@ import sys
 import configparser
 import os.path
 
-PLAYER_ALL = 0
-PLAYER_MEASUREMENTS = 1
 
 try:
     from . import carla_server_pb2 as carla_protocol
@@ -33,12 +31,12 @@ except ImportError:
 
 class SecureCarla(object):
     def __init__(self, config_file=None):
-
 	self.wait_counter = 0
 	# Load variance, mean, and offset parameters here:
         # Parse config file if config file provided 
         
-	print config_file
+        self.true_distances = []            # True distances to each agent
+        self.adversarial_distances = []     # False distances to each agent
         if config_file is not None:
             self.config = self.parse_config(config_file)
 
@@ -91,15 +89,16 @@ class SecureCarla(object):
             attack = np.random.normal(this_config['dist_attack_mean'], this_config['dist_attack_var'])
         else:
             attack = 0
-
-        distance = get_distance_to_agent(agent, player)
-	distance = distance + noise + attack 
+        distance = self.get_distance_to_agent(agent, player)
+	self.true_distances.append(distance)
+        distance = distance + noise + attack 
+        self.adversarial_distances.append(distance)
 
     # Modifies the accel value of the agent/player with noise and attack
     def accel_attack(self, this_config, agent):
         use_gaussian = int(this_config['use_gaussian_noise'])
         if use_gaussian:
-            noise = np.random.normal(this_config['acceel_noise_mean'], this_config['accel_noise_var'])
+            noise = np.random.normal(this_config['accel_noise_mean'], this_config['accel_noise_var'])
         else:
             noise = np.random.uniform(this_config['accel_noise_low'], this_config['accel_noise_low']) 
         
@@ -169,54 +168,45 @@ class SecureCarla(object):
 	self.accel_attack(this_config, player)
 	self.speed_attack(this_config, player)
 
-    def log_measurements(self, mode):
-        if mode == PLAYER_ALL:
-            logging.info("Measurement Values:")
-            logging.info('Speed = %f ',measurements.player_measurements.forward_speed)
-            logging.info('Accel = %f ',measurements.player_measurements.acceleration.x)
-            logging.info('x = %f ',measurements.player_measurements.transform.location.x)
-            logging.info('y = %f ',measurements.player_measurements.transform.location.y)
-            logging.info('z = %f ',measurements.player_measurements.transform.location.z)
-            logging.info('pitch = %f ',measurements.player_measurements.transform.rotation.pitch)
-            logging.info('yaw = %f ',measurements.player_measurements.transform.rotation.yaw)
-            logging.info('roll = %f ',measurements.player_measurements.transform.rotation.roll)
-            
-            logging.info("Adversarial Measurement Values:")
-            logging.info('Speed = %f ',measurements.player_measurements.forward_speed)
-            logging.info('Accel = %f ',measurements.player_measurements.acceleration.x)
-            logging.info('x = %f ',measurements.player_measurements.transform.location.x)
-            logging.info('y = %f ',measurements.player_measurements.transform.location.y)
-            logging.info('z = %f ',measurements.player_measurements.transform.location.z)
-            logging.info('pitch = %f ',measurements.player_measurements.transform.rotation.pitch)
-            logging.info('yaw = %f ',measurements.player_measurements.transform.rotation.yaw)
-            logging.info('roll = %f ',measurements.player_measurements.transform.rotation.roll)
-            for a in measurements.non_player_agents:
-                if a.WhichOneof('agent') == 'pedestrian':
-                    self.agent_inject(a.WhichOneof('agent'), a)
-                    logging.info('x = %f ',a.pedestrian.transform.location.x)
-                    logging.info('y = %f ',a.pedestrian.transform.location.y)
-                    logging.info('z = %f ',a.pedestrian.transform.location.z)
-                    break
+    def log_measurements(self, measurements):
+        logging.info('Player speed = %f ',measurements.player_measurements.forward_speed)
+        logging.info('Player accel = %f ',measurements.player_measurements.acceleration.x)
+        logging.info('Player x = %f ',measurements.player_measurements.transform.location.x)
+        logging.info('Player y = %f ',measurements.player_measurements.transform.location.y)
+        logging.info('Player z = %f ',measurements.player_measurements.transform.location.z)
         
-	self.distance_attack(agent.vehicle, 0, 10)
-	self.speed_attack(agent.vehicle,0,5)
-
-
-
-    def inject_adversarial(self,measurements, sensor_data):
-	
-	#Inject noise into the player measurements
-	self.player_inject(measurements.player_measurements)
-        log_measurements(PLAYER_ALL)
-
-	for a in measurements.non_player_agents:
-            if a.WhichOneof('agent') == 'pedestrian':
-                self.agent_inject(a.WhichOneof('agent'), a)
-                logging.info('x = %f ',a.pedestrian.transform.location.x)
-                logging.info('y = %f ',a.pedestrian.transform.location.y)
-                logging.info('z = %f ',a.pedestrian.transform.location.z)
+        for i,a in enumerate(measurements.non_player_agents):
+            if a.WhichOneof('agent') == 'vehicle':
+                logging.info('vehicle forward speed = %f ', a.vehicle.forward_speed)
+                logging.info('vehicle x = %f ', a.vehicle.transform.location.x)
+                logging.info('vehicle y = %f ', a.vehicle.transform.location.y)
+                logging.info('vehicle z = %f ', a.vehicle.transform.location.z)
+                # Only print distance values if attack already launched and new distances have
+                # already been stored in true_distances and adversarial_distances
+                if i < len(self.true_distances):
+                    logging.info('true distance to agent: %f', self.true_distances[i])
+                    logging.info('false distance to agent: %f', self.adversarial_distances[i])
                 break
-	image = sensor_data['CameraRGB']
+    
+
+
+    def inject_adversarial(self, measurements, sensor_data):
+	self.true_distances = []
+        self.adversarial_distances = []
+
+        logging.info("Measurement Values:")
+        self.log_measurements(measurements)
+
+        #Inject noise into the player measurements
+	self.player_inject(measurements.player_measurements)
+        
+	for a in measurements.non_player_agents:
+            self.agent_inject(measurements.player_measurements, a.WhichOneof('agent'), a)
+	
+        logging.info("Adversarial Measurement Values:")
+        self.log_measurements(measurements)
+        
+        image = sensor_data['CameraRGB']
 	array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
 	array = np.reshape(array, (image.height, image.width, 4))
 
