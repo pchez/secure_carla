@@ -15,6 +15,7 @@ from . import settings
 from . import tcp
 from . import util
 from . import image_converter
+import csv
 import logging
 import numpy as np
 import time
@@ -34,12 +35,20 @@ class SecureCarla(object):
 	self.wait_counter = 0
 	# Load variance, mean, and offset parameters here:
         # Parse config file if config file provided 
-        
-        self.true_distances = []            # True distances to each agent
-        self.adversarial_distances = []     # False distances to each agent
         if config_file is not None:
             self.config = self.parse_config(config_file)
+	self.csv_file = '../../securecarla_details.csv'
 
+	self.true_distances = {}            # True distances to each agent
+        self.adversarial_distances = {}     # False distances to each agent
+	self._dict_distances = {'true_distance' : -1,
+				'adversarial_distance' : -1
+				}
+	
+	with open(self.csv_file, 'w') as rfd:
+
+                rw = csv.DictWriter(rfd, self._dict_distances.keys())
+                rw.writeheader()
         return
         
 
@@ -76,23 +85,42 @@ class SecureCarla(object):
 
         return distance
 
+    def gauss_var_from_dist(self, distance, fixed_variance):
+        grad = fixed_variance/10
+        variance = grad*distance
+	return variance
+
+    def uniform_parms_from_dist(self, distance, fixed_low, fixed_high):
+        grad_low = fixed_low/10
+        low = grad_low*distance
+
+	grad_high = fixed_high/10
+        high = grad_high*distance
+	return low, high
+
     # Returns the distance value under noise and attack 
-    def distance_attack(self, this_config, agent, player=None):
+    def distance_attack(self, this_config, agent, agent_id, player=None):
+
+	distance = self.get_distance_to_agent(agent, player)
+	self.true_distances[agent_id] = distance
+
         use_gaussian = int(this_config['use_gaussian_noise'])
         if use_gaussian:
-            noise = np.random.normal(this_config['dist_noise_mean'], this_config['dist_noise_var'])
+	    # The variance is distance dependent
+	    variance = self.gauss_var_from_dist(distance, this_config['dist_noise_var'])
+            noise = np.random.normal(this_config['dist_noise_mean'], variance)
         else:
-            noise = np.random.uniform(this_config['dist_noise_low'], this_config['dist_noise_low']) 
+	    # The low and high parameters are distance dependent
+	    low, high = self.uniform_parms_from_dist(distance, this_config['dist_noise_low'], this_config['dist_noise_high'])
+            noise = np.random.uniform(low, high) 
 
         use_attack = int(this_config['use_attack'])
         if use_attack:
             attack = np.random.normal(this_config['dist_attack_mean'], this_config['dist_attack_var'])
         else:
             attack = 0
-        distance = self.get_distance_to_agent(agent, player)
-	self.true_distances.append(distance)
-        distance = distance + noise + attack 
-        self.adversarial_distances.append(distance)
+        distance = distance + noise + attack
+ 	self.adversarial_distances[agent_id] = distance
 
     # Modifies the accel value of the agent/player with noise and attack
     def accel_attack(self, this_config, agent):
@@ -100,7 +128,7 @@ class SecureCarla(object):
         if use_gaussian:
             noise = np.random.normal(this_config['accel_noise_mean'], this_config['accel_noise_var'])
         else:
-            noise = np.random.uniform(this_config['accel_noise_low'], this_config['accel_noise_low']) 
+            noise = np.random.uniform(this_config['accel_noise_low'], this_config['accel_noise_high']) 
         
         use_attack = int(this_config['use_attack'])
         if use_attack:
@@ -118,7 +146,7 @@ class SecureCarla(object):
 	if use_gaussian:
             noise = np.random.normal(this_config['speed_noise_mean'], this_config['speed_noise_var'])
         else:
-            noise = np.random.uniform(this_config['speed_noise_low'], this_config['speed_noise_low']) 
+            noise = np.random.uniform(this_config['speed_noise_low'], this_config['speed_noise_high']) 
         
         use_attack = int(this_config['use_attack'])
         if use_attack:
@@ -130,20 +158,20 @@ class SecureCarla(object):
 
     def traffic_light_inject(self, agent, player):
         this_config = self.config['trafficlight']
-	self.distance_attack(this_config, agent.traffic_light, player)
+	self.distance_attack(this_config, agent.traffic_light, agent.id, player)
 
     def speed_limit_sign_inject(self, agent, player):
         this_config = self.config['speedlimit']
-	self.distance_attack(this_config, agent.speed_limit_sign, player)
+	self.distance_attack(this_config, agent.speed_limit_sign, agent.id, player)
 
     def vehicle_inject(self, agent, player):
         this_config = self.config['vehicle']
-	self.distance_attack(this_config, agent.vehicle, player)
+	self.distance_attack(this_config, agent.vehicle, agent.id, player)
 	self.speed_attack(this_config, agent.vehicle)
 
     def pedestrian_inject(self, agent, player):
         this_config = self.config['pedestrian']
-	self.distance_attack(this_config, agent.pedestrian, player)
+	self.distance_attack(this_config, agent.pedestrian, agent.id, player)
 	self.speed_attack(this_config, agent.pedestrian)
 
     def agent_inject(self, player, agent_type, agent):
@@ -184,15 +212,57 @@ class SecureCarla(object):
                 # Only print distance values if attack already launched and new distances have
                 # already been stored in true_distances and adversarial_distances
                 if i < len(self.true_distances):
-                    logging.info('true distance to agent: %f', self.true_distances[i])
-                    logging.info('false distance to agent: %f', self.adversarial_distances[i])
+		    self.log_measurement_results(self.true_distances[a.id], self.adversarial_distances[a.id])
+                    logging.info('true distance to agent: %f', self.true_distances[a.id])
+                    logging.info('false distance to agent: %f', self.adversarial_distances[a.id])
                 break
-    
+    '''
+    def log_measurement_results(self):
 
+        with open(self.csv_file, 'a+') as rfd:
+	    print("Works")
+    
+        return
+
+            rw = csv.DictWriter(rfd, self._dict_rewards.keys())
+
+            for i in range(len(reward_vec)):
+                self._dict_rewards['exp_id'] = experiment.id
+                self._dict_rewards['rep'] = rep
+                self._dict_rewards['weather'] = experiment.Conditions.WeatherId
+                self._dict_rewards['collision_gen'] = reward_vec[
+                    i].collision_other
+                self._dict_rewards['collision_ped'] = reward_vec[
+                    i].collision_pedestrians
+                self._dict_rewards['collision_car'] = reward_vec[
+                    i].collision_vehicles
+                self._dict_rewards['lane_intersect'] = reward_vec[
+                    i].intersection_otherlane
+                self._dict_rewards['sidewalk_intersect'] = reward_vec[
+                    i].intersection_offroad
+                self._dict_rewards['pos_x'] = reward_vec[
+                    i].transform.location.x
+                self._dict_rewards['pos_y'] = reward_vec[
+                    i].transform.location.y
+
+                rw.writerow(self._dict_rewards)
+	
+    Here we want to log the measurements for an agent, any agent
+    '''
+
+    def log_measurement_results(self, true_distance, adversarial_distance):
+	
+	self._dict_distances['true_distance'] = true_distance
+        self._dict_distances['adversarial_distance'] = adversarial_distance
+	
+        with open(self.csv_file, 'a+') as rfd:
+	    w = csv.DictWriter(rfd, self._dict_distances.keys())
+
+            w.writerow(self._dict_distances)
+    
+        return
 
     def inject_adversarial(self, measurements, sensor_data):
-	self.true_distances = []
-        self.adversarial_distances = []
 
         logging.info("Measurement Values:")
         self.log_measurements(measurements)
@@ -206,6 +276,7 @@ class SecureCarla(object):
         logging.info("Adversarial Measurement Values:")
         self.log_measurements(measurements)
         
+	#self.log_measurement_results()
         image = sensor_data['CameraRGB']
 	array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
 	array = np.reshape(array, (image.height, image.width, 4))
