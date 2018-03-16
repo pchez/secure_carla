@@ -22,7 +22,8 @@ import time
 import sys
 import configparser
 import os.path
-
+import datetime
+from collections import OrderedDict
 
 try:
     from . import carla_server_pb2 as carla_protocol
@@ -41,10 +42,14 @@ class SecureCarla(object):
 
 	self.true_distances = {}            # True distances to each agent
         self.adversarial_distances = {}     # False distances to each agent
-	self._dict_distances = {'true_distance' : -1,
-				'adversarial_distance' : -1
-				}
+	self._dict_distances = OrderedDict([('datetime', -1),
+				('true_distance', -1),
+				])
+	for s in range(0,int(self.config['all']['num_sensors'])):
+		self._dict_distances['sensor{}'.format(s)] = -1
 	
+	print self._dict_distances
+	time.sleep(3)
 	with open(self.csv_file, 'w') as rfd:
 
                 rw = csv.DictWriter(rfd, self._dict_distances.keys())
@@ -99,28 +104,31 @@ class SecureCarla(object):
 	return low, high
 
     # Returns the distance value under noise and attack 
-    def distance_attack(self, this_config, agent, agent_id, player=None):
+    def distance_threshold_attack(self, this_config, agent, agent_id, player=None):
 
 	distance = self.get_distance_to_agent(agent, player)
-	self.true_distances[agent_id] = distance
+	
+	if(distance < self.config['all']['distance_threshold']):
+		self.true_distances[agent_id] = distance
+		sensor_distances = []
+		for s in range(0,int(self.config['all']['num_sensors'])):
+			use_gaussian = int(this_config['use_gaussian_noise'])
+			if use_gaussian:
+			    # The variance is distance dependent
+			    variance = self.gauss_var_from_dist(distance, this_config['dist_noise_var'])
+			    noise = np.random.normal(this_config['dist_noise_mean'], variance)
+			else:
+			    # The low and high parameters are distance dependent
+			    low, high = self.uniform_parms_from_dist(distance, this_config['dist_noise_low'], this_config['dist_noise_high'])
+			    noise = np.random.uniform(low, high) 
 
-        use_gaussian = int(this_config['use_gaussian_noise'])
-        if use_gaussian:
-	    # The variance is distance dependent
-	    variance = self.gauss_var_from_dist(distance, this_config['dist_noise_var'])
-            noise = np.random.normal(this_config['dist_noise_mean'], variance)
-        else:
-	    # The low and high parameters are distance dependent
-	    low, high = self.uniform_parms_from_dist(distance, this_config['dist_noise_low'], this_config['dist_noise_high'])
-            noise = np.random.uniform(low, high) 
-
-        use_attack = int(this_config['use_attack'])
-        if use_attack:
-            attack = np.random.normal(this_config['dist_attack_mean'], this_config['dist_attack_var'])
-        else:
-            attack = 0
-        distance = distance + noise + attack
- 	self.adversarial_distances[agent_id] = distance
+			use_attack = int(this_config['use_attack'])
+			if use_attack:
+			    attack = np.random.normal(this_config['dist_attack_mean'], this_config['dist_attack_var'])
+			else:
+			    attack = 0
+			sensor_distances.append(distance + noise + attack)
+	 	self.adversarial_distances[agent_id] = sensor_distances
 
     # Modifies the accel value of the agent/player with noise and attack
     def accel_attack(self, this_config, agent):
@@ -158,20 +166,20 @@ class SecureCarla(object):
 
     def traffic_light_inject(self, agent, player):
         this_config = self.config['trafficlight']
-	self.distance_attack(this_config, agent.traffic_light, agent.id, player)
+	self.distance_threshold_attack(this_config, agent.traffic_light, agent.id, player)
 
     def speed_limit_sign_inject(self, agent, player):
         this_config = self.config['speedlimit']
-	self.distance_attack(this_config, agent.speed_limit_sign, agent.id, player)
+	self.distance_threshold_attack(this_config, agent.speed_limit_sign, agent.id, player)
 
     def vehicle_inject(self, agent, player):
         this_config = self.config['vehicle']
-	self.distance_attack(this_config, agent.vehicle, agent.id, player)
+	self.distance_threshold_attack(this_config, agent.vehicle, agent.id, player)
 	self.speed_attack(this_config, agent.vehicle)
 
     def pedestrian_inject(self, agent, player):
         this_config = self.config['pedestrian']
-	self.distance_attack(this_config, agent.pedestrian, agent.id, player)
+	self.distance_threshold_attack(this_config, agent.pedestrian, agent.id, player)
 	self.speed_attack(this_config, agent.pedestrian)
 
     def agent_inject(self, player, agent_type, agent):
@@ -216,44 +224,13 @@ class SecureCarla(object):
                     logging.info('true distance to agent: %f', self.true_distances[a.id])
                     logging.info('false distance to agent: %f', self.adversarial_distances[a.id])
                 break
-    '''
-    def log_measurement_results(self):
-
-        with open(self.csv_file, 'a+') as rfd:
-	    print("Works")
-    
-        return
-
-            rw = csv.DictWriter(rfd, self._dict_rewards.keys())
-
-            for i in range(len(reward_vec)):
-                self._dict_rewards['exp_id'] = experiment.id
-                self._dict_rewards['rep'] = rep
-                self._dict_rewards['weather'] = experiment.Conditions.WeatherId
-                self._dict_rewards['collision_gen'] = reward_vec[
-                    i].collision_other
-                self._dict_rewards['collision_ped'] = reward_vec[
-                    i].collision_pedestrians
-                self._dict_rewards['collision_car'] = reward_vec[
-                    i].collision_vehicles
-                self._dict_rewards['lane_intersect'] = reward_vec[
-                    i].intersection_otherlane
-                self._dict_rewards['sidewalk_intersect'] = reward_vec[
-                    i].intersection_offroad
-                self._dict_rewards['pos_x'] = reward_vec[
-                    i].transform.location.x
-                self._dict_rewards['pos_y'] = reward_vec[
-                    i].transform.location.y
-
-                rw.writerow(self._dict_rewards)
-	
-    Here we want to log the measurements for an agent, any agent
-    '''
 
     def log_measurement_results(self, true_distance, adversarial_distance):
 	
+	self._dict_distances['datetime'] = datetime.datetime.now()
 	self._dict_distances['true_distance'] = true_distance
-        self._dict_distances['adversarial_distance'] = adversarial_distance
+	for s in range(0,int(self.config['all']['num_sensors'])):
+        	self._dict_distances['sensor{}'.format(s)] = adversarial_distance[s]
 	
         with open(self.csv_file, 'a+') as rfd:
 	    w = csv.DictWriter(rfd, self._dict_distances.keys())
