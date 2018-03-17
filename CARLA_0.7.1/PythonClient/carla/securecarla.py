@@ -34,6 +34,7 @@ except ImportError:
 class SecureCarla(object):
     def __init__(self, config_file=None):
 	self.wait_counter = 0
+	self.output_time = datetime.datetime.now()
 	# Load variance, mean, and offset parameters here:
         # Parse config file if config file provided 
         if config_file is not None:
@@ -227,15 +228,18 @@ class SecureCarla(object):
 
     def log_measurement_results(self, true_distance, adversarial_distance):
 	
-	self._dict_distances['datetime'] = datetime.datetime.now()
-	self._dict_distances['true_distance'] = true_distance
-	for s in range(0,int(self.config['all']['num_sensors'])):
-        	self._dict_distances['sensor{}'.format(s)] = adversarial_distance[s]
+	now = datetime.datetime.now()
+	if(now.second != self.output_time.second):
+		self._dict_distances['datetime'] = now
+		self._dict_distances['true_distance'] = true_distance
+		for s in range(0,int(self.config['all']['num_sensors'])):
+			self._dict_distances['sensor{}'.format(s)] = adversarial_distance[s]
 	
-        with open(self.csv_file, 'a+') as rfd:
-	    w = csv.DictWriter(rfd, self._dict_distances.keys())
+		with open(self.csv_file, 'a+') as rfd:
+		    w = csv.DictWriter(rfd, self._dict_distances.keys())
 
-            w.writerow(self._dict_distances)
+		    w.writerow(self._dict_distances)
+		self.output_time = now
     
         return
 
