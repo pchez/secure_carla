@@ -34,6 +34,7 @@ except ImportError:
 class SecureCarla(object):
     def __init__(self, config_file=None):
 	self.wait_counter = 0
+	self.step = 0
 	self.output_time = datetime.datetime.now()
 	# Load variance, mean, and offset parameters here:
         # Parse config file if config file provided 
@@ -42,15 +43,19 @@ class SecureCarla(object):
 	self.csv_file = '../../securecarla_details.csv'
 
 	self.true_distances = {}            # True distances to each agent
+	self.noise_distances = {}	    # Distances with added noise
         self.adversarial_distances = {}     # False distances to each agent
-	self._dict_distances = OrderedDict([('datetime', -1),
+	self._dict_distances = OrderedDict([('step', -1),
+				('src_node', -1),
+				('dest_node', -1),
+				('noise_distance', -1),
+				('adversarial_distance', -1),
 				('true_distance', -1),
 				])
-	for s in range(0,int(self.config['all']['num_sensors'])):
-		self._dict_distances['sensor{}'.format(s)] = -1
+	#for s in range(0,int(self.config['all']['num_sensors'])):
+	#	self._dict_distances['sensor{}'.format(s)] = -1
 	
 	print self._dict_distances
-	time.sleep(3)
 	with open(self.csv_file, 'w') as rfd:
 
                 rw = csv.DictWriter(rfd, self._dict_distances.keys())
@@ -111,7 +116,8 @@ class SecureCarla(object):
 	
 	if(distance < self.config['all']['distance_threshold']):
 		self.true_distances[agent_id] = distance
-		sensor_distances = []
+		adversarial_distances = []
+		noise_distances = []
 		for s in range(0,int(self.config['all']['num_sensors'])):
 			use_gaussian = int(this_config['use_gaussian_noise'])
 			if use_gaussian:
@@ -122,14 +128,16 @@ class SecureCarla(object):
 			    # The low and high parameters are distance dependent
 			    low, high = self.uniform_parms_from_dist(distance, this_config['dist_noise_low'], this_config['dist_noise_high'])
 			    noise = np.random.uniform(low, high) 
+			noise_distances.append(distance + noise)
 
 			use_attack = int(this_config['use_attack'])
 			if use_attack:
 			    attack = np.random.normal(this_config['dist_attack_mean'], this_config['dist_attack_var'])
 			else:
 			    attack = 0
-			sensor_distances.append(distance + noise + attack)
-	 	self.adversarial_distances[agent_id] = sensor_distances
+			adversarial_distances.append(distance + noise + attack)
+	 	self.noise_distances[agent_id] = noise_distances
+		self.adversarial_distances[agent_id] = adversarial_distances
 
     # Modifies the accel value of the agent/player with noise and attack
     def accel_attack(self, this_config, agent):
@@ -221,32 +229,39 @@ class SecureCarla(object):
                 # Only print distance values if attack already launched and new distances have
                 # already been stored in true_distances and adversarial_distances
                 if i < len(self.true_distances):
-		    self.log_measurement_results(self.true_distances[a.id], self.adversarial_distances[a.id])
+		    self.log_measurement_results(self.noise_distances[a.id], self.adversarial_distances[a.id],self.true_distances[a.id])
                     logging.info('true distance to agent: %f', self.true_distances[a.id])
-                    logging.info('false distance to agent: %f', self.adversarial_distances[a.id])
+                    logging.info('false distance to agent: %f', self.adversarial_distances[a.id][0])
                 break
 
-    def log_measurement_results(self, true_distance, adversarial_distance):
+    def log_measurement_results(self, noise_distances, adversarial_distances, true_distance):
 	
-	now = datetime.datetime.now()
-	if(now.second != self.output_time.second):
-		self._dict_distances['datetime'] = now
-		self._dict_distances['true_distance'] = true_distance
-		for s in range(0,int(self.config['all']['num_sensors'])):
-			self._dict_distances['sensor{}'.format(s)] = adversarial_distance[s]
-	
-		with open(self.csv_file, 'a+') as rfd:
-		    w = csv.DictWriter(rfd, self._dict_distances.keys())
+	#now = datetime.datetime.now()
+	#if(now.second != self.output_time.second):
+	#self._dict_distances['datetime'] = now
+	src_node = self.step%int(self.config['all']['num_sensors'])
+	self._dict_distances['step'] = self.step
+	self._dict_distances['src_node'] = src_node
+	self._dict_distances['dest_node'] = 7 
+	self._dict_distances['noise_distance'] = noise_distances[src_node]
+	self._dict_distances['adversarial_distance'] = adversarial_distances[src_node]
+	self._dict_distances['true_distance'] = true_distance
 
-		    w.writerow(self._dict_distances)
-		self.output_time = now
+	#for s in range(0,int(self.config['all']['num_sensors'])):
+	#	self._dict_distances['sensor{}'.format(s)] = adversarial_distance[s]
+	
+	with open(self.csv_file, 'a+') as rfd:
+		w = csv.DictWriter(rfd, self._dict_distances.keys())
+		w.writerow(self._dict_distances)
+	#self.output_time = now
+	self.step = self.step + 1
     
         return
 
     def inject_adversarial(self, measurements, sensor_data):
 
-        logging.info("Measurement Values:")
-        self.log_measurements(measurements)
+        #logging.info("Measurement Values:")
+        #self.log_measurements(measurements)
 
         #Inject noise into the player measurements
 	self.player_inject(measurements.player_measurements)
@@ -257,7 +272,6 @@ class SecureCarla(object):
         logging.info("Adversarial Measurement Values:")
         self.log_measurements(measurements)
         
-	#self.log_measurement_results()
         image = sensor_data['CameraRGB']
 	array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
 	array = np.reshape(array, (image.height, image.width, 4))
