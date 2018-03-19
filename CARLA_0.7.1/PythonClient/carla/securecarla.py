@@ -36,6 +36,8 @@ class SecureCarla(object):
 	self.wait_counter = 0
 	self.step = 0
 	self.output_time = datetime.datetime.now()
+	self.agent_num = 0
+
 	# Load variance, mean, and offset parameters here:
         # Parse config file if config file provided 
         if config_file is not None:
@@ -113,6 +115,9 @@ class SecureCarla(object):
     def distance_threshold_attack(self, this_config, agent, agent_id, player=None):
 
 	distance = self.get_distance_to_agent(agent, player)
+	
+	if distance < 1000:
+		print("Distance: {}, Agent_ID: {}".format(distance,agent_id))
 	
 	if(distance < self.config['all']['distance_threshold']):
 		self.true_distances[agent_id] = distance
@@ -220,19 +225,25 @@ class SecureCarla(object):
         logging.info('Player y = %f ',measurements.player_measurements.transform.location.y)
         logging.info('Player z = %f ',measurements.player_measurements.transform.location.z)
         
+	self.agent_num = 0
         for i,a in enumerate(measurements.non_player_agents):
             if a.WhichOneof('agent') == 'vehicle':
-                logging.info('vehicle forward speed = %f ', a.vehicle.forward_speed)
-                logging.info('vehicle x = %f ', a.vehicle.transform.location.x)
-                logging.info('vehicle y = %f ', a.vehicle.transform.location.y)
-                logging.info('vehicle z = %f ', a.vehicle.transform.location.z)
+		self.agent_num = self.agent_num +1
+		logging.info('agent_ID: {}'.format(self.agent_num))
+                #logging.info('vehicle forward speed = %f ', a.vehicle.forward_speed)
+                #logging.info('vehicle x = %f ', a.vehicle.transform.location.x)
+                #logging.info('vehicle y = %f ', a.vehicle.transform.location.y)
+                #logging.info('vehicle z = %f ', a.vehicle.transform.location.z)
                 # Only print distance values if attack already launched and new distances have
                 # already been stored in true_distances and adversarial_distances
-                if i < len(self.true_distances):
-		    self.log_measurement_results(self.noise_distances[a.id], self.adversarial_distances[a.id],self.true_distances[a.id])
-                    logging.info('true distance to agent: %f', self.true_distances[a.id])
-                    logging.info('false distance to agent: %f', self.adversarial_distances[a.id][0])
-                break
+		if (self.agent_num == 15):
+		        if i < len(self.true_distances):
+			    self.log_measurement_results(self.noise_distances[a.id], 
+							 self.adversarial_distances[a.id],
+							 self.true_distances[a.id])
+                	logging.info('true distance to agent: %f', self.true_distances[a.id])
+                	logging.info('false distance to agent: %f', self.adversarial_distances[a.id][0])
+                
 
     def log_measurement_results(self, noise_distances, adversarial_distances, true_distance):
 	
@@ -288,19 +299,19 @@ class SecureCarla(object):
 	#array = np.flipud(array)
 
 	#One channel only
-	tmp_array = np.zeros(array.shape, dtype="uint8")
-	tmp_array[:,:,0] = array[:,:,0]
-	array = tmp_array
+	#tmp_array = np.zeros(array.shape, dtype="uint8")
+	#tmp_array[:,:,0] = array[:,:,0]
+	#array = tmp_array
 
 	#Serialize the data
-	array = np.reshape(array, (image.height*image.width*4))
-	array = array.tostring()
-	sensor_data['CameraRGB'].raw_data = array
+	#array = np.reshape(array, (image.height*image.width*4))
+	#array = array.tostring()
+	#sensor_data['CameraRGB'].raw_data = array
 	
 	#self.wait_counter = self.wait_counter + 1
 	#print self.wait_counter
 	if self.wait_counter >= 50:
-		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_images/camera_outputs/one_colour.png")
+		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_images/camera_outputs/normal.png")
 		print("Done")
 		time.sleep(5)
 	return measurements, sensor_data
