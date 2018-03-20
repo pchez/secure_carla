@@ -13,30 +13,13 @@ import math
 import os
 import abc
 import logging
-
-
+import sys, time, tty, termios, os
 from builtins import input as input_data
 from carla.client import VehicleControl
 
 def sldist(c1, c2):
     return math.sqrt((c2[0] - c1[0])**2 + (c2[1] - c1[1])**2)
 
-
-try:
-    import pygame
-    from pygame.locals import K_DOWN
-    from pygame.locals import K_LEFT
-    from pygame.locals import K_RIGHT
-    from pygame.locals import K_SPACE
-    from pygame.locals import K_UP
-    from pygame.locals import K_a
-    from pygame.locals import K_d
-    from pygame.locals import K_q
-    from pygame.locals import K_r
-    from pygame.locals import K_s
-    from pygame.locals import K_w
-except ImportError:
-    raise RuntimeError('cannot import pygame, make sure pygame package is installed')
 
 class Benchmark(object):
 
@@ -98,31 +81,41 @@ class Benchmark(object):
         self._image_filename_format = os.path.join(
             self._full_name, '_images/episode_{:s}/{:s}/image_{:0>5d}.jpg')
 
-    def _get_keyboard_control(self, keys):
-        """
-        Return a VehicleControl message based on the pressed keys. Return None
-        if a new episode was requested.
-        """
-        if keys[K_r]:
-            return None
-        print 'got keyboard input'
+    def get_char():
+        ch = None
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(sys.stdin.fileno())
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        return ch
 
+    def get_keyboard_control(char):
         control = VehicleControl()
-        if keys[K_LEFT] or keys[K_a]:
+        if char == 'a':
+            print 'got a'
             control.steer = -1.0
-        if keys[K_RIGHT] or keys[K_d]:
+        if char == 'd':
+            print 'got d'
             control.steer = 1.0
-        if keys[K_UP] or keys[K_w]:
+        if char == 'w':
+            print 'got w'
             control.throttle = 1.0
-        if keys[K_DOWN] or keys[K_s]:
+        if char == 's':
+            print 'got s'
             control.brake = 1.0
-        if keys[K_SPACE]:
+        if char == ' ':
+            print 'got space'
             control.hand_brake = True
-        if keys[K_q]:
+        if char == 'q':
+            print 'got q'
             self._is_on_reverse = not self._is_on_reverse
         control.reverse = self._is_on_reverse
         return control
-    
+
+
     def run_navigation_episode(
             self,
             agent,
@@ -147,7 +140,7 @@ class Benchmark(object):
             
             # Prioritize control from keyboard,
             # else use control from imitation learning algorithm
-            manual_control = self._get_keyboard_control(pygame.key.get_pressed())
+            manual_control = self.get_keyboard_control(get_char())
             if manual_control is None:
                 control = agent.run_step(measurements, sensor_data, target)
                 carla.send_control(control)
