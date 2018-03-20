@@ -3,7 +3,6 @@ import logging
 import sys
 
 from carla.benchmarks.corl_2017 import CoRL2017
-
 from carla.tcp import TCPConnectionError
 from carla.client import make_carla_client
 from agents.imitation.imitation_learning import ImitationLearning
@@ -13,6 +12,8 @@ try:
     from carla import carla_server_pb2 as carla_protocol
 except ImportError:
     raise RuntimeError('cannot import "carla_server_pb2.py", run the protobuf compiler to generate this file')
+
+
 
 if (__name__ == '__main__'):
 
@@ -60,7 +61,6 @@ if (__name__ == '__main__'):
 
             with make_carla_client(args.host, args.port) as client:
                 corl = CoRL2017(args.city_name, args.log_name)
-
                 results = corl.benchmark_agent(agent, client)
                 corl.plot_summary_test()
                 corl.plot_summary_train()
