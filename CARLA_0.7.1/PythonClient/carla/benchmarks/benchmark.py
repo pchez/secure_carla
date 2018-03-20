@@ -81,7 +81,7 @@ class Benchmark(object):
         self._image_filename_format = os.path.join(
             self._full_name, '_images/episode_{:s}/{:s}/image_{:0>5d}.jpg')
 
-    def get_char():
+    def get_char(self):
         ch = None
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
@@ -92,7 +92,7 @@ class Benchmark(object):
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         return ch
 
-    def get_keyboard_control(char):
+    def get_keyboard_control(self, char):
         control = VehicleControl()
         if char == 'a':
             print 'got a'
@@ -140,7 +140,8 @@ class Benchmark(object):
             
             # Prioritize control from keyboard,
             # else use control from imitation learning algorithm
-            manual_control = self.get_keyboard_control(get_char())
+            #manual_control = self.get_keyboard_control(self.get_char())
+            manual_control = None
             if manual_control is None:
                 control = agent.run_step(measurements, sensor_data, target)
                 carla.send_control(control)
