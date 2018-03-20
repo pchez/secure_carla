@@ -60,6 +60,8 @@ class SecureCarla(object):
 	
 	self.meas_fifo = Queue.Queue() #to hold measurements during delay attack
         self.sensor_fifo = Queue.Queue() #to hold camera frames during delay attack
+        self.meas_buf = []
+        self.sensor_buf = []
 
         with open(self.csv_file, 'w') as rfd:
 
@@ -273,7 +275,7 @@ class SecureCarla(object):
         return
 
     def delay_attack(self, curr_frame, nframes, measurements, sensor_data):
-        #Don't launch attack until nframes (set in config file) reached
+        # Don't launch attack until nframes (set in config file) reached
         if curr_frame < nframes:
             self.wait_counter = curr_frame + 1
             self.meas_fifo.put(measurements)
@@ -286,6 +288,24 @@ class SecureCarla(object):
             self.meas_fifo.put(measurements)
             self.sensor_fifo.put(sensor_data)
         return delayed_measurements, delayed_sensor_data
+
+    def frame_swap_attack(self, curr_frame, nframes, measurements, sensor_data):
+        # Don't execute frame swap until nframes (set in config file) reached
+        if curr_frame < nframes:
+            self.wait_counter = curr_frame + 1
+            self.meas_buf.append(measurements)
+            self.sensor_buf.append(sensor_data)
+            swapped_measurements = measurements
+            swapped_sensor_data = sensor_data
+        else: 
+            # Randomly select an index of the buffer to return
+            # Populate that index with the current measurement
+            index = np.random.random_integers(0,nframes-1)
+            swapped_measurements = self.meas_buf[index]
+            swapped_sensor_data = self.sensor_data[index]
+            self.meas_buf[index] = measurements
+            self.sensor_data[index] = sensor_data
+        return swapped_measurements, swapped_sensor_data
 
     def inject_adversarial(self, measurements, sensor_data):
 
@@ -330,8 +350,12 @@ class SecureCarla(object):
 	#print self.wait_counter
 	
         #Delay attack modifies measurements and sensor_data to values from a previous frame
-        if self.config['all']['delay_attack'] == 1:
-            measurements, sensor_data = self.delay_attack(self.wait_counter, self.config['all']['nframes'], measurements, sensor_data) 
+        if self.config['time']['delay_attack'] == 1:
+            measurements, sensor_data = self.delay_attack(self.wait_counter, self.config['time']['nframes'], measurements, sensor_data) 
+
+        #Frame swap attack swaps measurements and sensor_data of adjacent frames
+        elif self.config['time']['frame_swap_attack'] == 1:
+            measurements, sensor_data = self.frame_swap_attack(self.wait_counter, self.config['time']['nframes'], measurements, sensor_data)
 
         if self.wait_counter >= 50:
 		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_images/camera_outputs/normal.png")
