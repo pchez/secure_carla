@@ -37,6 +37,5 @@ control = None
 while True:
     char = getch()
     control = get_keyboard_control(char)
-   
     time.sleep(0.5)
 
