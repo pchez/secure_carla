@@ -16,13 +16,27 @@ import logging
 
 
 from builtins import input as input_data
-
-
 from carla.client import VehicleControl
 
 def sldist(c1, c2):
     return math.sqrt((c2[0] - c1[0])**2 + (c2[1] - c1[1])**2)
 
+
+try:
+    import pygame
+    from pygame.locals import K_DOWN
+    from pygame.locals import K_LEFT
+    from pygame.locals import K_RIGHT
+    from pygame.locals import K_SPACE
+    from pygame.locals import K_UP
+    from pygame.locals import K_a
+    from pygame.locals import K_d
+    from pygame.locals import K_q
+    from pygame.locals import K_r
+    from pygame.locals import K_s
+    from pygame.locals import K_w
+except ImportError:
+    raise RuntimeError('cannot import pygame, make sure pygame package is installed')
 
 class Benchmark(object):
 
@@ -84,6 +98,31 @@ class Benchmark(object):
         self._image_filename_format = os.path.join(
             self._full_name, '_images/episode_{:s}/{:s}/image_{:0>5d}.jpg')
 
+    def _get_keyboard_control(self, keys):
+        """
+        Return a VehicleControl message based on the pressed keys. Return None
+        if a new episode was requested.
+        """
+        if keys[K_r]:
+            return None
+        print 'got keyboard input'
+
+        control = VehicleControl()
+        if keys[K_LEFT] or keys[K_a]:
+            control.steer = -1.0
+        if keys[K_RIGHT] or keys[K_d]:
+            control.steer = 1.0
+        if keys[K_UP] or keys[K_w]:
+            control.throttle = 1.0
+        if keys[K_DOWN] or keys[K_s]:
+            control.brake = 1.0
+        if keys[K_SPACE]:
+            control.hand_brake = True
+        if keys[K_q]:
+            self._is_on_reverse = not self._is_on_reverse
+        control.reverse = self._is_on_reverse
+        return control
+    
     def run_navigation_episode(
             self,
             agent,
@@ -103,15 +142,22 @@ class Benchmark(object):
         distance = 10000
 
         while(t1 - t0) < (time_out * 1000) and not success:
+            # Get data from server, apply attack on measurements
             measurements, sensor_data = carla.read_data(adversarial=True)
+            
+            # Prioritize control from keyboard,
+            # else use control from imitation learning algorithm
+            manual_control = self._get_keyboard_control(pygame.key.get_pressed())
+            if manual_control is None:
+                control = agent.run_step(measurements, sensor_data, target)
+                carla.send_control(control)
+            else:
+                carla.send_control(manual_control)
 
-            control = agent.run_step(measurements, sensor_data, target)
-
+            # Log control info
             logging.info("Controller is Inputting:")
             logging.info('Steer = %f Throttle = %f Brake = %f ',
                          control.steer, control.throttle, control.brake)
-
-            carla.send_control(control)
 
             # measure distance to target
             if self._save_images:
@@ -145,7 +191,6 @@ class Benchmark(object):
         return 0, measurement_vec, time_out, distance
 
     def benchmark_agent(self, agent, carla):
-
         if self._line_on_file == 0:
             # The fixed name considering all the experiments being run
             with open(os.path.join(self._full_name,
