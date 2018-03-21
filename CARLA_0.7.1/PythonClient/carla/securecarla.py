@@ -125,48 +125,56 @@ class SecureCarla(object):
     # Return which sensor can see the agent based on the player's yaw and agent's x,y location
     def is_in_sensors_fov(self, player, agent, distance_to_agent):
         sensor_fov = self.config['all']['sensor_fov']
-        player_yaw = player.transform.orientation.yaw
+        player_yaw = player.transform.rotation.yaw
         player_x = player.transform.location.x
         player_y = player.transform.location.y
         agent_x = agent.transform.location.x
         agent_y = agent.transform.location.y
-        sensor_front_yaw = player_yaw
-        sensor_back_yaw = (sensor_front_yaw - 180) if (sensor_front_yaw - 180) > -360 else (sensor_front_yaw + 180)
-        sensor_right_yaw = (sensor_right_yaw - 90) if (sensor_right_yaw - 90) > -360 else (sensor_right_yaw + 270)
-        sensor_left_yaw = (sensor_left_yaw + 90) if (sensor_left_yaw + 90) < 360 else (sensor_left_yaw - 270)
         
+        player_yaw = player_yaw if player_yaw > 0 else player_yaw + 360
+        sensor_front_yaw = 0
+        sensor_back_yaw = 180
+        sensor_right_yaw = 90
+        sensor_left_yaw = 270
+
         # Calculate agent's angle from player, convert to be within -360 to 360
-        agent_angle = player_yaw - np.arctan((agent_y - player_y)/(agent_x - player_x))
+        agent_angle = np.arctan2((agent_y - player_y), (agent_x - player_x)) * 180 / np.pi - player_yaw
         if agent_angle > 360:
             agent_angle = agent_angle - 360
-        elif agent_angle < -360:
+        elif agent_angle < -sensor_fov:
             agent_angle = agent_angle + 360
-        else: #360 or -360
+        elif agent_angle == 360 or agent_angle == -360:
             agent_angle = 0
+        
 
         # Determine which sensor's FOV the agent falls in. For now, just select one of the sensors
         # (basically assuming that only one distance sensor picking up the agent)
         # 0: SENSOR_FRONT, 1: SENSOR_BACK, 2: SENSOR_RIGHT, 3: SENSOR_RIGHT
         sensors = [sensor_front_yaw, sensor_back_yaw, sensor_right_yaw, sensor_left_yaw]
+        #print agent_y, player_y, agent_x, player_x
+        #print 'agent_angle', agent_angle
+        #print 'player yaw', player_yaw, 'agent angle from x', np.arctan2((player_y-agent_y),(player_x - agent_x)) * 180 / np.pi
+        
+        which_sensor = None
         for i,sensor in enumerate(sensors):
             left_bound = sensor + sensor_fov
             right_bound = sensor - sensor_fov
-            left_bound = left_bound if left_bound > 360 else left_bound - 360
-            right_bound = right_bound if right_bound < 360 else right_bound + 360
-
-            if sensor < left_bound and sensor > right_bound:
+            left_bound = left_bound if left_bound < 360 else left_bound - 360
+            right_bound = right_bound if right_bound > -360 else right_bound + 360
+            #print 'left_bound:',left_bound, 'right_bound',right_bound, 'agent_angle', agent_angle
+            if agent_angle < left_bound and agent_angle > right_bound:
                 which_sensor = i
                 break
 
-        return which_sensor
+        return which_sensor, agent_angle
     
     # Returns the distance value under noise and attack 
     def distance_threshold_attack(self, this_config, agent, agent_id, player=None):
-
+        sensors = ['front', 'back', 'right', 'left']
 	distance = self.get_distance_to_agent(agent, player)
         	
-	if distance < 1000:
-            print("Distance: {}, Agent_ID: {}".format(distance,agent_id))
+	#if distance < 1000:
+            #print("Distance: {}, Agent_ID: {}".format(distance,agent_id))
         """
         TODO: [pseudocode]
         get yaw, get FOV from config file, theta measured as angle of the sensor direction 
@@ -183,8 +191,9 @@ class SecureCarla(object):
             self.true_distances[agent_id] = distance
             adversarial_distances = []
             noise_distances = []
-            which_sensor = self.is_in_sensors_fov(player, agent, distance)
-            print agent_id, 'being detected by', which_sensor
+            which_sensor, angle_from_player = self.is_in_sensors_fov(player, agent, distance)
+            if which_sensor is not None:
+                print type(agent), 'sensor:', sensors[which_sensor], angle_from_player, 'deg', 'at', distance
 
             for s in range(0,int(self.config['all']['num_sensors'])):
                 use_gaussian = int(this_config['use_gaussian_noise'])
@@ -385,15 +394,14 @@ class SecureCarla(object):
         elif self.config['time']['frame_swap_attack'] == 1:
             measurements, sensor_data = self.frame_swap_attack(self.wait_counter, self.config['time']['nframes'], measurements, sensor_data)
 
-        logging.info("Adversarial Measurement Values:")
-        self.log_measurements(measurements)
+        #logging.info("Adversarial Measurement Values:")
+        #self.log_measurements(measurements)
 
 	sensor_data['CameraRGB'].raw_data = camera_attack.perform_attack(sensor_data['CameraRGB'])
 	
-	self.wait_counter = self.wait_counter + 1
-	print self.wait_counter
-	if self.wait_counter >= 200:
-		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_outputs/camera_outputs/fisheye.png")
+	#self.wait_counter = self.wait_counter + 1
+	if self.wait_counter >= 600:
+		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_outputs/camera_outputs/screengrab.png")
 		print("Done")
 		time.sleep(5)
 	return measurements, sensor_data
