@@ -52,10 +52,11 @@ class SecureCarla(object):
 	self.true_distances = {}            # True distances to each agent
 	self.noise_distances = {}	    # Distances with added noise
         self.adversarial_distances = {}     # False distances to each agent
-	self._dict_distances = OrderedDict([('step', -1),
+        self.detected_by_sensor = {}
+        self._dict_distances = OrderedDict([('step', -1),
 				('src_node', -1),
 				('dest_node', -1),
-				('sensor', -1),
+                                ('sensor', -1),
                                 ('noise_distance', -1),
 				('adversarial_distance', -1),
 				('true_distance', -1),
@@ -192,31 +193,36 @@ class SecureCarla(object):
             self.true_distances[agent_id] = distance
             adversarial_distances = []
             noise_distances = []
+            
+            # Get the sensor that the agent is currently in the FOV of
             which_sensor, angle_from_player = self.is_in_sensors_fov(player, agent, distance)
+            
+            # Only attack and log if agent detected by a sensor
             if which_sensor is not None:
                 print type(agent), 'sensor:', sensors[which_sensor], angle_from_player, 'deg', 'at', distance
 
-            for s in range(0,int(self.config['all']['num_sensors'])):
-                use_gaussian = int(this_config['use_gaussian_noise'])
-                if use_gaussian:
-                    # The variance is distance dependent
-                    variance = self.gauss_var_from_dist(distance, this_config['dist_noise_var'])
-                    noise = np.random.normal(this_config['dist_noise_mean'], variance)
-                else:
-                    # The low and high parameters are distance dependent
-                    low, high = self.uniform_parms_from_dist(distance, this_config['dist_noise_low'], this_config['dist_noise_high'])
-                    noise = np.random.uniform(low, high) 
-                noise_distances.append(distance + noise)
+                for s in range(0,int(self.config['all']['num_sensors'])):
+                    use_gaussian = int(this_config['use_gaussian_noise'])
+                    if use_gaussian:
+                        # The variance is distance dependent
+                        variance = self.gauss_var_from_dist(distance, this_config['dist_noise_var'])
+                        noise = np.random.normal(this_config['dist_noise_mean'], variance)
+                    else:
+                        # The low and high parameters are distance dependent
+                        low, high = self.uniform_parms_from_dist(distance, this_config['dist_noise_low'], this_config['dist_noise_high'])
+                        noise = np.random.uniform(low, high) 
+                    noise_distances.append(distance + noise)
 
-                use_attack = int(this_config['use_attack'])
-                if use_attack:
-                    attack = np.random.normal(this_config['dist_attack_mean'], this_config['dist_attack_var'])
-                else:
-                    attack = 0
-                adversarial_distances.append(distance + noise + attack)
-            self.detected_by_sensor[agent_id] = which_sensor
-            self.noise_distances[agent_id] = noise_distances
-            self.adversarial_distances[agent_id] = adversarial_distances
+                    use_attack = int(this_config['use_attack'])
+                    if use_attack:
+                        attack = np.random.normal(this_config['dist_attack_mean'], this_config['dist_attack_var'])
+                    else:
+                        attack = 0
+                    adversarial_distances.append(distance + noise + attack)
+                
+                self.detected_by_sensor[agent_id] = which_sensor
+                self.noise_distances[agent_id] = noise_distances
+                self.adversarial_distances[agent_id] = adversarial_distances
 
     # Modifies the accel value of the agent/player with noise and attack
     def accel_attack(self, this_config, agent):
@@ -300,40 +306,35 @@ class SecureCarla(object):
         logging.info('Player roll = %f ',measurements.player_measurements.transform.rotation.roll)
         
 	self.agent_num = 0
-        for i,a in enumerate(measurements.non_player_agents):
-            if a.WhichOneof('agent') == 'vehicle':
-		#self.agent_num = self.agent_num +1
-		#logging.info('agent_ID: {}'.format(self.agent_num))
-                #logging.info('vehicle forward speed = %f ', a.vehicle.forward_speed)
-                #logging.info('vehicle x = %f ', a.vehicle.transform.location.x)
-                #logging.info('vehicle y = %f ', a.vehicle.transform.location.y)
-                #logging.info('vehicle z = %f ', a.vehicle.transform.location.z)
-                # Only print distance values if attack already launched and new distances have
-                # already been stored in true_distances and adversarial_distances
-		if (self.agent_num == 15):
-		        if i < len(self.true_distances):
-			    self.log_measurement_results(self.detected_by_sensor[a.id],
-                                                         self.noise_distances[a.id], 
-							 self.adversarial_distances[a.id],
-							 self.true_distances[a.id])
-                	logging.info('true distance to agent: %f', self.true_distances[a.id])
-                	logging.info('false distance to agent: %f', self.adversarial_distances[a.id][0])
-                
+        for i,agent_id in enumerate(self.detected_by_sensor.keys()):
+            #self.agent_num = self.agent_num +1
+            #logging.info('agent_ID: {}'.format(self.agent_num))
+            #logging.info('vehicle forward speed = %f ', a.vehicle.forward_speed)
+            #logging.info('vehicle x = %f ', a.vehicle.transform.location.x)
+            #logging.info('vehicle y = %f ', a.vehicle.transform.location.y)
+            #logging.info('vehicle z = %f ', a.vehicle.transform.location.z)
+            # Only print distance values if attack already launched and new distances have
+            # already been stored in true_distances and adversarial_distances
+            self.log_measurements_csv(agent_id)
+            
+            #logging.info('true distance to agent: %f', self.true_distances[agent_id])
+            #logging.info('false distance to agent: %f', self.adversarial_distances[agent_id][0])
+            
 
-    def log_measurement_results(self, which_sensor, noise_distances, adversarial_distances, true_distance):
-	
+    def log_measurements_csv(self, agent_id):
+
 	#now = datetime.datetime.now()
 	#if(now.second != self.output_time.second):
 	#self._dict_distances['datetime'] = now
 	src_node = self.step%int(self.config['all']['num_sensors'])
 	self._dict_distances['step'] = self.step
 	self._dict_distances['src_node'] = src_node
-	self._dict_distances['dest_node'] = 7 
-	self._dict_distances['sensor'] = which_sensor,
-        self._dict_distances['noise_distance'] = noise_distances[src_node]
-	self._dict_distances['adversarial_distance'] = adversarial_distances[src_node]
-	self._dict_distances['true_distance'] = true_distance
-
+	self._dict_distances['dest_node'] = agent_id
+	self._dict_distances['sensor'] = self.detected_by_sensor[agent_id]
+        self._dict_distances['noise_distance'] = self.noise_distances[agent_id][src_node]
+	self._dict_distances['adversarial_distance'] = self.adversarial_distances[agent_id][src_node]
+	self._dict_distances['true_distance'] = self.true_distances[agent_id]
+        
 	#for s in range(0,int(self.config['all']['num_sensors'])):
 	#	self._dict_distances['sensor{}'.format(s)] = adversarial_distance[s]
 	
@@ -341,7 +342,6 @@ class SecureCarla(object):
 		w = csv.DictWriter(rfd, self._dict_distances.keys())
 		w.writerow(self._dict_distances)
 	#self.output_time = now
-	self.step = self.step + 1
     
         return
 
@@ -383,31 +383,34 @@ class SecureCarla(object):
 
         #logging.info("Measurement Values:")
         #self.log_measurements(measurements)
-
-        #Inject noise into the player measurements
-	self.player_inject(measurements.player_measurements)
-        
-	for a in measurements.non_player_agents:
-            self.agent_inject(measurements.player_measurements, a.WhichOneof('agent'), a)
 	
         #Delay attack modifies measurements and sensor_data to values from a previous frame
         if self.config['time']['delay_attack'] == 1:
             measurements, sensor_data = self.delay_attack(self.wait_counter, self.config['time']['nframes'], measurements, sensor_data) 
-
         #Frame swap attack swaps measurements and sensor_data of adjacent frames
         elif self.config['time']['frame_swap_attack'] == 1:
             measurements, sensor_data = self.frame_swap_attack(self.wait_counter, self.config['time']['nframes'], measurements, sensor_data)
+        
+        #Inject noise into the player measurements
+	self.player_inject(measurements.player_measurements)
+        
+        #Inject noise into agent measurements
+        for a in measurements.non_player_agents:
+            self.agent_inject(measurements.player_measurements, a.WhichOneof('agent'), a)
+        
+        logging.info("Adversarial Measurement Values:")
+        self.log_measurements(measurements)
 
-        #logging.info("Adversarial Measurement Values:")
-        #self.log_measurements(measurements)
-
-	sensor_data['CameraRGB'].raw_data = camera_attack.perform_attack(sensor_data['CameraRGB'])
+#	sensor_data['CameraRGB'].raw_data = camera_attack.perform_attack(sensor_data['CameraRGB'])
 	
 	#self.wait_counter = self.wait_counter + 1
-	if self.wait_counter >= 600:
-		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_outputs/camera_outputs/screengrab.png")
+	#print self.wait_counter
+	if self.wait_counter >= 80:
+		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_outputs/camera_outputs/pedestrian.png")
 		print("Done")
 		time.sleep(5)
-	return measurements, sensor_data
+	
+	self.step = self.step + 1
+        return measurements, sensor_data
 	
 
