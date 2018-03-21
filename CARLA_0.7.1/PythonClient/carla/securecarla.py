@@ -57,6 +57,9 @@ class SecureCarla(object):
                                 ('noise_distance', -1),
 				('adversarial_distance', -1),
 				('true_distance', -1),
+                                ('noise_speed', -1),
+                                ('adversarial_speed', -1),
+                                ('true_speed', -1)
                                 ])
 	#for s in range(0,int(self.config['all']['num_sensors'])):
 	#	self._dict_distances['sensor{}'.format(s)] = -1
@@ -239,7 +242,8 @@ class SecureCarla(object):
 	agent.acceleration.z = agent.acceleration.z + noise + attack
 
     # Modifies the forward speed value of the agent/player with noise and attack
-    def speed_attack(self, this_config, agent):
+    def speed_attack(self, this_config, agent, agent_id):
+        true_speed = agent.forward_speed
         use_gaussian = int(this_config['use_gaussian_noise'])
 	if use_gaussian:
             noise = np.random.normal(this_config['speed_noise_mean'], this_config['speed_noise_var'])
@@ -251,8 +255,11 @@ class SecureCarla(object):
             attack = np.random.normal(this_config['speed_attack_mean'], this_config['speed_attack_var'])
         else:
             attack = 0
-
-        agent.forward_speed = agent.forward_speed + noise + attack
+        
+        noise_speed = agent.forward_speed + noise
+        adversarial_speed = agent.forward_speed + noise + attack
+        self.scsensors[agent_id].updateSpeeds(true_speed, noise_speed, adversarial_speed)
+        agent.forward_speed = adversarial_speed
 
     def traffic_light_inject(self, agent, player):
         this_config = self.config['trafficlight']
@@ -265,12 +272,12 @@ class SecureCarla(object):
     def vehicle_inject(self, agent, player):
         this_config = self.config['vehicle']
 	self.distance_threshold_attack(this_config, agent.vehicle, agent.id, player)
-	self.speed_attack(this_config, agent.vehicle)
+	self.speed_attack(this_config, agent.vehicle, agent.id)
 
     def pedestrian_inject(self, agent, player):
         this_config = self.config['pedestrian']
 	self.distance_threshold_attack(this_config, agent.pedestrian, agent.id, player)
-	self.speed_attack(this_config, agent.pedestrian)
+	self.speed_attack(this_config, agent.pedestrian, agent.id)
 
     def agent_inject(self, player, agent_type, agent):
 
