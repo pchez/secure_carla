@@ -15,6 +15,7 @@ from . import settings
 from . import tcp
 from . import util
 from . import image_converter
+from . import camera_attack
 import csv
 import logging
 import numpy as np
@@ -24,6 +25,7 @@ import configparser
 import os.path
 import datetime
 import Queue
+
 from collections import OrderedDict
 
 try:
@@ -38,6 +40,8 @@ class SecureCarla(object):
 	self.step = 0
 	self.output_time = datetime.datetime.now()
 	self.agent_num = 0
+	self.first_reading = True
+	self.past_player = None
 
 	# Load variance, mean, and offset parameters here:
         # Parse config file if config file provided 
@@ -57,13 +61,15 @@ class SecureCarla(object):
 				])
 	#for s in range(0,int(self.config['all']['num_sensors'])):
 	#	self._dict_distances['sensor{}'.format(s)] = -1
-	
+
 	self.meas_fifo = Queue.Queue() #to hold measurements during delay attack
         self.sensor_fifo = Queue.Queue() #to hold camera frames during delay attack
         self.meas_buf = []
         self.sensor_buf = []
 
-        with open(self.csv_file, 'w') as rfd:
+	print self._dict_distances
+
+	with open(self.csv_file, 'w') as rfd:
 
                 rw = csv.DictWriter(rfd, self._dict_distances.keys())
                 rw.writeheader()
@@ -224,16 +230,16 @@ class SecureCarla(object):
 	self.speed_attack(this_config, player)
 
     def log_measurements(self, measurements):
-        logging.info('Player speed = %f ',measurements.player_measurements.forward_speed)
-        logging.info('Player accel = %f ',measurements.player_measurements.acceleration.x)
-        logging.info('Player x = %f ',measurements.player_measurements.transform.location.x)
-        logging.info('Player y = %f ',measurements.player_measurements.transform.location.y)
-        logging.info('Player z = %f ',measurements.player_measurements.transform.location.z)
+        #logging.info('Player speed = %f ',measurements.player_measurements.forward_speed)
+        #logging.info('Player accel = %f ',measurements.player_measurements.acceleration.x)
+        logging.info('Player yaw = %f ',measurements.player_measurements.transform.rotation.yaw)
+        logging.info('Player pitch = %f ',measurements.player_measurements.transform.rotation.pitch)
+        logging.info('Player roll = %f ',measurements.player_measurements.transform.rotation.roll)
         
 	self.agent_num = 0
         for i,a in enumerate(measurements.non_player_agents):
             if a.WhichOneof('agent') == 'vehicle':
-		self.agent_num = self.agent_num +1
+		#self.agent_num = self.agent_num +1
 		#logging.info('agent_ID: {}'.format(self.agent_num))
                 #logging.info('vehicle forward speed = %f ', a.vehicle.forward_speed)
                 #logging.info('vehicle x = %f ', a.vehicle.transform.location.x)
@@ -318,37 +324,6 @@ class SecureCarla(object):
 	for a in measurements.non_player_agents:
             self.agent_inject(measurements.player_measurements, a.WhichOneof('agent'), a)
 	
-        #logging.info("Adversarial Measurement Values:")
-        #self.log_measurements(measurements)
-        
-        image = sensor_data['CameraRGB']
-	array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
-	array = np.reshape(array, (image.height, image.width, 4))
-
-	#Noise injection
-	noise = np.random.randint(0,130,array.shape,dtype=np.dtype("uint8"))
-	#array = array + noise
-
-	#Block injection
-	array.setflags(write=1)
-	#array[115:355,325:450,:] = 0
-
-	#Flip the image
-	#array = np.flipud(array)
-
-	#One channel only
-	#tmp_array = np.zeros(array.shape, dtype="uint8")
-	#tmp_array[:,:,0] = array[:,:,0]
-	#array = tmp_array
-
-	#Serialize the data
-	#array = np.reshape(array, (image.height*image.width*4))
-	#array = array.tostring()
-	#sensor_data['CameraRGB'].raw_data = array
-	
-	#self.wait_counter = self.wait_counter + 1
-	#print self.wait_counter
-	
         #Delay attack modifies measurements and sensor_data to values from a previous frame
         if self.config['time']['delay_attack'] == 1:
             measurements, sensor_data = self.delay_attack(self.wait_counter, self.config['time']['nframes'], measurements, sensor_data) 
@@ -357,8 +332,15 @@ class SecureCarla(object):
         elif self.config['time']['frame_swap_attack'] == 1:
             measurements, sensor_data = self.frame_swap_attack(self.wait_counter, self.config['time']['nframes'], measurements, sensor_data)
 
-        if self.wait_counter >= 50:
-		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_images/camera_outputs/normal.png")
+        logging.info("Adversarial Measurement Values:")
+        self.log_measurements(measurements)
+
+	sensor_data['CameraRGB'].raw_data = camera_attack.perform_attack(sensor_data['CameraRGB'])
+	
+	#self.wait_counter = self.wait_counter + 1
+	print self.wait_counter
+	if self.wait_counter >= 50:
+		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_outputs/camera_outputs/fisheye.png")
 		print("Done")
 		time.sleep(5)
 	return measurements, sensor_data
