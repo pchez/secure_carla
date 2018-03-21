@@ -307,10 +307,11 @@ class SecureCarla(object):
             # Randomly select an index of the buffer to return
             # Populate that index with the current measurement
             index = np.random.random_integers(0,nframes-1)
+	    print "index:{}".format(index)
             swapped_measurements = self.meas_buf[index]
-            swapped_sensor_data = self.sensor_data[index]
+            swapped_sensor_data = self.sensor_buf[index]
             self.meas_buf[index] = measurements
-            self.sensor_data[index] = sensor_data
+            self.sensor_buf[index] = sensor_data
         return swapped_measurements, swapped_sensor_data
 
     def inject_adversarial(self, measurements, sensor_data):
@@ -335,7 +336,7 @@ class SecureCarla(object):
         logging.info("Adversarial Measurement Values:")
         self.log_measurements(measurements)
 
-	sensor_data['CameraRGB'].raw_data = camera_attack.perform_attack(sensor_data['CameraRGB'])
+	#sensor_data['CameraRGB'].raw_data = camera_attack.perform_attack(sensor_data['CameraRGB'])
 	
 	#self.wait_counter = self.wait_counter + 1
 	print self.wait_counter

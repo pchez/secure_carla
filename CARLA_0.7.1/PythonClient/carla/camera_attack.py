@@ -46,8 +46,6 @@ def warp_attack(image):
 	image = transform.warp(image, fisheye, mode='wrap')
 	image = image*255
 	image = image.astype("uint8")
-	#print image.shape
-	#print type(image)
 	return image
 
 def colour_attack(image):
