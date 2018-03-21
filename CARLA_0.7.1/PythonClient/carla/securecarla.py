@@ -49,7 +49,10 @@ class SecureCarla(object):
             self.config = self.parse_config(config_file)
 	self.csv_file = '../../securecarla_details.csv'
 
-	self.scsensors = {}
+        # self.scsensors holds SCSensor objects that are encountered by the player
+	# init an object for the player 
+        self.scsensors = {}
+        self.scsensors['000000000'] = SCSensor()
         self._dict_distances = OrderedDict([('step', -1),
 				('src_node', -1),
 				('dest_node', -1),
@@ -219,7 +222,7 @@ class SecureCarla(object):
                         attack = 0
                     adversarial_distances.append(distance + noise + attack)
                     
-                self.scsensors[agent_id] = SCSensor(agent_id)
+                self.scsensors[agent_id] = SCSensor()
                 self.scsensors[agent_id].updateDistances(distance, noise_distances, adversarial_distances)
                 self.scsensors[agent_id].setDistanceSensor(which_sensor)
     

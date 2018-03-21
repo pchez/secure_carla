@@ -3,8 +3,7 @@
 import numpy as np
 
 class SCSensor(object):
-    def __init__(self, agent_id, config_file=None):
-        self.agent_id = agent_id
+    def __init__(self, config_file=None):
         self.detected_by_sensor = np.nan
         self.true_distance = np.nan
         self.noise_distances = np.nan #list with length num_sensors
