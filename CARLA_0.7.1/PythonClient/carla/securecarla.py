@@ -294,7 +294,7 @@ class SecureCarla(object):
 	#self.wait_counter = self.wait_counter + 1
 	print self.wait_counter
 	if self.wait_counter >= 50:
-		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_outputs/camera_outputs/fliplr.png")
+		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_outputs/camera_outputs/fisheye.png")
 		print("Done")
 		time.sleep(5)
 	return measurements, sensor_data
