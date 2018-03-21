@@ -42,6 +42,7 @@ class SecureCarla(object):
 	self.agent_num = 0
 	self.first_reading = True
 	self.past_player = None
+        self.player_id = '00000000'
 
 	# Load variance, mean, and offset parameters here:
         # Parse config file if config file provided 
@@ -52,7 +53,7 @@ class SecureCarla(object):
         # self.scsensors holds SCSensor objects that are encountered by the player
 	# init an object for the player 
         self.scsensors = {}
-        self.scsensors['000000000'] = SCSensor()
+        self.scsensors[player_id] = SCSensor()
         self._dict_distances = OrderedDict([('step', -1),
 				('src_node', -1),
 				('dest_node', -1),
@@ -227,7 +228,7 @@ class SecureCarla(object):
                 self.scsensors[agent_id].setDistanceSensor(which_sensor)
     
     # Modifies the accel value of the agent/player with noise and attack
-    def accel_attack(self, this_config, agent):
+    def accel_attack(self, this_config, agent, agent_id):
         use_gaussian = int(this_config['use_gaussian_noise'])
         if use_gaussian:
             noise = np.random.normal(this_config['accel_noise_mean'], this_config['accel_noise_var'])
@@ -240,9 +241,24 @@ class SecureCarla(object):
         else:
             attack = 0
         
-        agent.acceleration.x = agent.acceleration.x + noise + attack
-	agent.acceleration.y = agent.acceleration.y + noise + attack
-	agent.acceleration.z = agent.acceleration.z + noise + attack
+        noise_accel_x = agent.acceleration.x + noise
+        noise_accel_y = agent.acceleration.y + noise
+        noise_accel_z = agent.acceleration.z + noise
+         
+        adv_accel_x = agent.acceleration.x + noise + attack
+	adv_accel_y = agent.acceleration.y + noise + attack
+	adv_accel_z = agent.acceleration.z + noise + attack
+        
+        self.scsensors[agent_id].updateAccel(noise_accel_x,
+                                             noise_accel_y,
+                                             noise_accel_z,
+                                             adv_accel_x,
+                                             adv_accel_y,
+                                             adv_accel_z)
+
+        agent.acceleration.x = adv_accel_x
+	agent.acceleration.y = adv_accel_y
+	agent.acceleration.z = adv_accel_z
 
     # Modifies the forward speed value of the agent/player with noise and attack
     def speed_attack(self, this_config, agent, agent_id):
@@ -302,17 +318,24 @@ class SecureCarla(object):
 
     def player_inject(self, player):
 	this_config = self.config['player']
-	self.accel_attack(this_config, player)
-	self.speed_attack(this_config, player)
+	self.accel_attack(this_config, player, self.player_id)
+	self.speed_attack(this_config, player, self.player_id)
 
     def log_measurements(self, measurements):
         #logging.info('Player speed = %f ',measurements.player_measurements.forward_speed)
         #logging.info('Player accel = %f ',measurements.player_measurements.acceleration.x)
-        logging.info('Player yaw = %f ',measurements.player_measurements.transform.rotation.yaw)
-        logging.info('Player pitch = %f ',measurements.player_measurements.transform.rotation.pitch)
-        logging.info('Player roll = %f ',measurements.player_measurements.transform.rotation.roll)
+        player_orientation = measurements.player_measurements.transform.rotation
+        logging.info('Player pitch = %f ',player_orientation.pitch)
+        logging.info('Player yaw = %f ',player_orientation.yaw)
+        logging.info('Player roll = %f ',player_orientation.roll)
         
-	self.agent_num = 0
+        # Logging for player
+        self.scsensors[player_id].updateOrientation(player_orientation.pitch,
+                                                    player_orientation.yaw,
+                                                    player_orientation.roll)
+	self.log_measurements_csv(player_id, self.scsensors[player_id])
+
+        # Logging for agents 
         for i,agent_id in enumerate(self.scsensors.keys()):
             #self.agent_num = self.agent_num +1
             #logging.info('agent_ID: {}'.format(self.agent_num))
@@ -333,15 +356,35 @@ class SecureCarla(object):
 	#now = datetime.datetime.now()
 	#if(now.second != self.output_time.second):
 	#self._dict_distances['datetime'] = now
-        src_node = self.step%int(self.config['all']['num_sensors'])
-	self._dict_distances['step'] = self.step
-	self._dict_distances['src_node'] = src_node
-	self._dict_distances['dest_node'] = agent_id
-	self._dict_distances['sensor'] = scsensor.detected_by_sensor
-        self._dict_distances['noise_distance'] = scsensor.noise_distances[src_node]
-	self._dict_distances['adversarial_distance'] = scsensor.adversarial_distances[src_node]
-	self._dict_distances['true_distance'] = scsensor.true_distance
         
+        # Only report distances for agents not player
+        if scsensor.agent_type is not 'player':
+            src_node = self.step%int(self.config['all']['num_sensors'])
+            self._dict_distances['src_node'] = src_node
+            self._dict_distances['dest_node'] = agent_id
+            self._dict_distances['sensor'] = scsensor.detected_by_sensor
+            self._dict_distances['noise_distance'] = scsensor.noise_distances[src_node]
+            self._dict_distances['adversarial_distance'] = scsensor.adversarial_distances[src_node]
+            self._dict_distances['true_distance'] = scsensor.true_distance
+        
+        # Parameters that can be reported for both agents and player
+	self._dict_distances['step'] = self.step
+        self._dict_distances['noise_speed'] = scsensor.noise_speed
+        self._dict_distances['adversarial_speed'] = scsensor.adversarial_speed
+        self._dict_distances['true_speed'] = scsensor.true_speed
+        
+        self._dict_distances['true_accel_x'] = scsensor.true_accel_x
+        self._dict_distances['true_accel_y'] = scsensor.true_accel_y
+        self._dict_distances['true_accel_z'] = scsensor.true_accel_z
+        self._dict_distances['adv_accel_x'] = scsensor.adv_accel_x
+        self._dict_distances['adv_accel_y'] = scsensor.adv_accel_y
+        self._dict_distances['adv_accel_z'] = scsensor.adv_accel_z
+
+        self._dict_distances['pitch'] = scsensor.pitch
+        self._dict_distances['yaw'] = scsensor.yaw
+        self._dict_distances['roll'] = scsensor.roll
+
+       
 	#for s in range(0,int(self.config['all']['num_sensors'])):
 	#	self._dict_distances['sensor{}'.format(s)] = adversarial_distance[s]
 	
