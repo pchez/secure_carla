@@ -55,7 +55,8 @@ class SecureCarla(object):
 	self._dict_distances = OrderedDict([('step', -1),
 				('src_node', -1),
 				('dest_node', -1),
-				('noise_distance', -1),
+				('sensor', -1),
+                                ('noise_distance', -1),
 				('adversarial_distance', -1),
 				('true_distance', -1),
 				])
@@ -213,6 +214,7 @@ class SecureCarla(object):
                 else:
                     attack = 0
                 adversarial_distances.append(distance + noise + attack)
+            self.detected_by_sensor[agent_id] = which_sensor
             self.noise_distances[agent_id] = noise_distances
             self.adversarial_distances[agent_id] = adversarial_distances
 
@@ -310,14 +312,15 @@ class SecureCarla(object):
                 # already been stored in true_distances and adversarial_distances
 		if (self.agent_num == 15):
 		        if i < len(self.true_distances):
-			    self.log_measurement_results(self.noise_distances[a.id], 
+			    self.log_measurement_results(self.detected_by_sensor[a.id],
+                                                         self.noise_distances[a.id], 
 							 self.adversarial_distances[a.id],
 							 self.true_distances[a.id])
                 	logging.info('true distance to agent: %f', self.true_distances[a.id])
                 	logging.info('false distance to agent: %f', self.adversarial_distances[a.id][0])
                 
 
-    def log_measurement_results(self, noise_distances, adversarial_distances, true_distance):
+    def log_measurement_results(self, which_sensor, noise_distances, adversarial_distances, true_distance):
 	
 	#now = datetime.datetime.now()
 	#if(now.second != self.output_time.second):
@@ -326,7 +329,8 @@ class SecureCarla(object):
 	self._dict_distances['step'] = self.step
 	self._dict_distances['src_node'] = src_node
 	self._dict_distances['dest_node'] = 7 
-	self._dict_distances['noise_distance'] = noise_distances[src_node]
+	self._dict_distances['sensor'] = which_sensor,
+        self._dict_distances['noise_distance'] = noise_distances[src_node]
 	self._dict_distances['adversarial_distance'] = adversarial_distances[src_node]
 	self._dict_distances['true_distance'] = true_distance
 
