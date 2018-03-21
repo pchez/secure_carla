@@ -8,6 +8,7 @@ from . import sensor
 from skimage import data
 from skimage.transform import swirl
 from skimage import transform, data, io
+import Image
 
 def fisheye(xy):
     center = np.mean(xy, axis=0)
@@ -54,13 +55,36 @@ def colour_attack(image):
 	image = tmp_array
 	return image
 
+def laser_attack(image):
+	foreground = Image.open("/home/carla/Downloads/laser_transparent.png")
+	foreground = np.array(foreground)
+	foreground[:,:,0] = 0
+	foreground[:,:,2] = 0
+	foreground = Image.fromarray(foreground)
+	
+	basewidth = 800
+	wpercent = (basewidth/float(foreground.size[0]))
+	hsize = int((float(foreground.size[1])*float(wpercent)))
+	foreground = foreground.resize((basewidth,hsize), Image.ANTIALIAS)
+	foreground = foreground.crop((0,200,800,800))
+
+	background = Image.fromarray(image)
+	background = background.convert('RGBA')
+	print background.size
+	combined = Image.new('RGBA',background.size)
+	combined = Image.alpha_composite(combined,background)
+	combined = Image.alpha_composite(combined,foreground)
+	combined = np.array(combined)	
+
+	return combined
 
 def perform_attack(image):
 	perform_noise_attack = False 
 	perform_block_attack = False
 	perform_flip_attack = False
-	perform_warp_attack =  True
+	perform_warp_attack =  False
 	perform_colour_attack = False
+	perform_laser_attack = True
 
 	width = image.width
 	height = image.height
@@ -83,6 +107,9 @@ def perform_attack(image):
 
 	if perform_colour_attack:
 		image = colour_attack(image)
+
+	if perform_laser_attack:
+		image = laser_attack(image)
 
 	#Serialize the data
 	image = np.reshape(image, (height*width*4))

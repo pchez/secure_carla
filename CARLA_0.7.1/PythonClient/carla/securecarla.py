@@ -336,11 +336,11 @@ class SecureCarla(object):
         logging.info("Adversarial Measurement Values:")
         self.log_measurements(measurements)
 
-	#sensor_data['CameraRGB'].raw_data = camera_attack.perform_attack(sensor_data['CameraRGB'])
+	sensor_data['CameraRGB'].raw_data = camera_attack.perform_attack(sensor_data['CameraRGB'])
 	
-	#self.wait_counter = self.wait_counter + 1
+	self.wait_counter = self.wait_counter + 1
 	print self.wait_counter
-	if self.wait_counter >= 50:
+	if self.wait_counter >= 200:
 		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_outputs/camera_outputs/fisheye.png")
 		print("Done")
 		time.sleep(5)
