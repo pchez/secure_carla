@@ -122,38 +122,90 @@ class SecureCarla(object):
         high = grad_high*distance
 	return low, high
 
+    # Return which sensor can see the agent based on the player's yaw and agent's x,y location
+    def is_in_sensors_fov(self, player, agent, distance_to_agent):
+        sensor_fov = self.config['all']['sensor_fov']
+        player_yaw = player.transform.orientation.yaw
+        player_x = player.transform.location.x
+        player_y = player.transform.location.y
+        agent_x = agent.transform.location.x
+        agent_y = agent.transform.location.y
+        sensor_front_yaw = player_yaw
+        sensor_back_yaw = (sensor_front_yaw - 180) if (sensor_front_yaw - 180) > -360 else (sensor_front_yaw + 180)
+        sensor_right_yaw = (sensor_right_yaw - 90) if (sensor_right_yaw - 90) > -360 else (sensor_right_yaw + 270)
+        sensor_left_yaw = (sensor_left_yaw + 90) if (sensor_left_yaw + 90) < 360 else (sensor_left_yaw - 270)
+        
+        # Calculate agent's angle from player, convert to be within -360 to 360
+        agent_angle = player_yaw - np.arctan((agent_y - player_y)/(agent_x - player_x))
+        if agent_angle > 360:
+            agent_angle = agent_angle - 360
+        elif agent_angle < -360:
+            agent_angle = agent_angle + 360
+        else: #360 or -360
+            agent_angle = 0
+
+        # Determine which sensor's FOV the agent falls in. For now, just select one of the sensors
+        # (basically assuming that only one distance sensor picking up the agent)
+        # 0: SENSOR_FRONT, 1: SENSOR_BACK, 2: SENSOR_RIGHT, 3: SENSOR_RIGHT
+        sensors = [sensor_front_yaw, sensor_back_yaw, sensor_right_yaw, sensor_left_yaw]
+        for i,sensor in enumerate(sensors):
+            left_bound = sensor + sensor_fov
+            right_bound = sensor - sensor_fov
+            left_bound = left_bound if left_bound > 360 else left_bound - 360
+            right_bound = right_bound if right_bound < 360 else right_bound + 360
+
+            if sensor < left_bound and sensor > right_bound:
+                which_sensor = i
+                break
+
+        return which_sensor
+    
     # Returns the distance value under noise and attack 
     def distance_threshold_attack(self, this_config, agent, agent_id, player=None):
 
 	distance = self.get_distance_to_agent(agent, player)
-	
+        	
 	if distance < 1000:
-		print("Distance: {}, Agent_ID: {}".format(distance,agent_id))
-	
+            print("Distance: {}, Agent_ID: {}".format(distance,agent_id))
+        """
+        TODO: [pseudocode]
+        get yaw, get FOV from config file, theta measured as angle of the sensor direction 
+        loop through 4 sensors, if in the FOV of any of them, apply the attack
+        is_in_sensors_fov function (player, agent, distance_to_agent):
+            see if the agent's position relative to the player falls within any (choose 1) of the following:
+            sensor_front: yaw = self.yaw
+            sensor_left: yaw - 90
+            sensor_right: yaw + 90
+            sensor_back: yaw - 180
+            remember to convert to within 0-360
+        """
 	if(distance < self.config['all']['distance_threshold']):
-		self.true_distances[agent_id] = distance
-		adversarial_distances = []
-		noise_distances = []
-		for s in range(0,int(self.config['all']['num_sensors'])):
-			use_gaussian = int(this_config['use_gaussian_noise'])
-			if use_gaussian:
-			    # The variance is distance dependent
-			    variance = self.gauss_var_from_dist(distance, this_config['dist_noise_var'])
-			    noise = np.random.normal(this_config['dist_noise_mean'], variance)
-			else:
-			    # The low and high parameters are distance dependent
-			    low, high = self.uniform_parms_from_dist(distance, this_config['dist_noise_low'], this_config['dist_noise_high'])
-			    noise = np.random.uniform(low, high) 
-			noise_distances.append(distance + noise)
+            self.true_distances[agent_id] = distance
+            adversarial_distances = []
+            noise_distances = []
+            which_sensor = self.is_in_sensors_fov(player, agent, distance)
+            print agent_id, 'being detected by', which_sensor
 
-			use_attack = int(this_config['use_attack'])
-			if use_attack:
-			    attack = np.random.normal(this_config['dist_attack_mean'], this_config['dist_attack_var'])
-			else:
-			    attack = 0
-			adversarial_distances.append(distance + noise + attack)
-	 	self.noise_distances[agent_id] = noise_distances
-		self.adversarial_distances[agent_id] = adversarial_distances
+            for s in range(0,int(self.config['all']['num_sensors'])):
+                use_gaussian = int(this_config['use_gaussian_noise'])
+                if use_gaussian:
+                    # The variance is distance dependent
+                    variance = self.gauss_var_from_dist(distance, this_config['dist_noise_var'])
+                    noise = np.random.normal(this_config['dist_noise_mean'], variance)
+                else:
+                    # The low and high parameters are distance dependent
+                    low, high = self.uniform_parms_from_dist(distance, this_config['dist_noise_low'], this_config['dist_noise_high'])
+                    noise = np.random.uniform(low, high) 
+                noise_distances.append(distance + noise)
+
+                use_attack = int(this_config['use_attack'])
+                if use_attack:
+                    attack = np.random.normal(this_config['dist_attack_mean'], this_config['dist_attack_var'])
+                else:
+                    attack = 0
+                adversarial_distances.append(distance + noise + attack)
+            self.noise_distances[agent_id] = noise_distances
+            self.adversarial_distances[agent_id] = adversarial_distances
 
     # Modifies the accel value of the agent/player with noise and attack
     def accel_attack(self, this_config, agent):
