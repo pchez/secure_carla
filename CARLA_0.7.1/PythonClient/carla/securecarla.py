@@ -6,7 +6,6 @@
 
 """Secure CARLA."""
 
-import struct
 
 from contextlib import contextmanager
 
@@ -25,6 +24,7 @@ import configparser
 import os.path
 import datetime
 import Queue
+from securecarlasensors import SCSensor
 
 from collections import OrderedDict
 
@@ -49,10 +49,7 @@ class SecureCarla(object):
             self.config = self.parse_config(config_file)
 	self.csv_file = '../../securecarla_details.csv'
 
-	self.true_distances = {}            # True distances to each agent
-	self.noise_distances = {}	    # Distances with added noise
-        self.adversarial_distances = {}     # False distances to each agent
-        self.detected_by_sensor = {}
+	self.scsensors = {}
         self._dict_distances = OrderedDict([('step', -1),
 				('src_node', -1),
 				('dest_node', -1),
@@ -60,7 +57,7 @@ class SecureCarla(object):
                                 ('noise_distance', -1),
 				('adversarial_distance', -1),
 				('true_distance', -1),
-				])
+                                ])
 	#for s in range(0,int(self.config['all']['num_sensors'])):
 	#	self._dict_distances['sensor{}'.format(s)] = -1
 
@@ -190,7 +187,6 @@ class SecureCarla(object):
             remember to convert to within 0-360
         """
 	if(distance < self.config['all']['distance_threshold']):
-            self.true_distances[agent_id] = distance
             adversarial_distances = []
             noise_distances = []
             
@@ -219,11 +215,11 @@ class SecureCarla(object):
                     else:
                         attack = 0
                     adversarial_distances.append(distance + noise + attack)
-                
-                self.detected_by_sensor[agent_id] = which_sensor
-                self.noise_distances[agent_id] = noise_distances
-                self.adversarial_distances[agent_id] = adversarial_distances
-
+                    
+                self.scsensors[agent_id] = SCSensor(agent_id)
+                self.scsensors[agent_id].updateDistances(distance, noise_distances, adversarial_distances)
+                self.scsensors[agent_id].setDistanceSensor(which_sensor)
+    
     # Modifies the accel value of the agent/player with noise and attack
     def accel_attack(self, this_config, agent):
         use_gaussian = int(this_config['use_gaussian_noise'])
@@ -277,7 +273,8 @@ class SecureCarla(object):
 	self.speed_attack(this_config, agent.pedestrian)
 
     def agent_inject(self, player, agent_type, agent):
-	if(agent_type == 'traffic_light'):
+
+        if(agent_type == 'traffic_light'):
 		self.traffic_light_inject(agent, player)
 	elif(agent_type == 'speed_limit_sign'):
 		self.speed_limit_sign_inject(agent, player)
@@ -306,7 +303,7 @@ class SecureCarla(object):
         logging.info('Player roll = %f ',measurements.player_measurements.transform.rotation.roll)
         
 	self.agent_num = 0
-        for i,agent_id in enumerate(self.detected_by_sensor.keys()):
+        for i,agent_id in enumerate(self.scsensors.keys()):
             #self.agent_num = self.agent_num +1
             #logging.info('agent_ID: {}'.format(self.agent_num))
             #logging.info('vehicle forward speed = %f ', a.vehicle.forward_speed)
@@ -315,25 +312,25 @@ class SecureCarla(object):
             #logging.info('vehicle z = %f ', a.vehicle.transform.location.z)
             # Only print distance values if attack already launched and new distances have
             # already been stored in true_distances and adversarial_distances
-            self.log_measurements_csv(agent_id)
+            self.log_measurements_csv(agent_id, self.scsensors[agent_id])
             
             #logging.info('true distance to agent: %f', self.true_distances[agent_id])
             #logging.info('false distance to agent: %f', self.adversarial_distances[agent_id][0])
             
 
-    def log_measurements_csv(self, agent_id):
+    def log_measurements_csv(self, agent_id, scsensor):
 
 	#now = datetime.datetime.now()
 	#if(now.second != self.output_time.second):
 	#self._dict_distances['datetime'] = now
-	src_node = self.step%int(self.config['all']['num_sensors'])
+        src_node = self.step%int(self.config['all']['num_sensors'])
 	self._dict_distances['step'] = self.step
 	self._dict_distances['src_node'] = src_node
 	self._dict_distances['dest_node'] = agent_id
-	self._dict_distances['sensor'] = self.detected_by_sensor[agent_id]
-        self._dict_distances['noise_distance'] = self.noise_distances[agent_id][src_node]
-	self._dict_distances['adversarial_distance'] = self.adversarial_distances[agent_id][src_node]
-	self._dict_distances['true_distance'] = self.true_distances[agent_id]
+	self._dict_distances['sensor'] = scsensor.detected_by_sensor
+        self._dict_distances['noise_distance'] = scsensor.noise_distances[src_node]
+	self._dict_distances['adversarial_distance'] = scsensor.adversarial_distances[src_node]
+	self._dict_distances['true_distance'] = scsensor.true_distance
         
 	#for s in range(0,int(self.config['all']['num_sensors'])):
 	#	self._dict_distances['sensor{}'.format(s)] = adversarial_distance[s]
