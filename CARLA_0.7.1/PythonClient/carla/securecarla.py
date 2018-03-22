@@ -27,6 +27,8 @@ import Queue
 from securecarlasensors import SCSensor
 from liveplotter import Plotter
 from collections import OrderedDict
+from genericattack import GenericAttack
+from genericdefense import GenericDefense
 
 try:
     from . import carla_server_pb2 as carla_protocol
@@ -44,6 +46,8 @@ class SecureCarla(object):
 	self.past_player = None
         self.player_id = '00000000'
         self.plotter = Plotter()
+	self.genericattack = GenericAttack()
+	self.genericdefense = GenericDefense()
         self.target_vehicle_id = 0
         # Load variance, mean, and offset parameters here:
         # Parse config file if config file provided 
@@ -470,45 +474,51 @@ class SecureCarla(object):
         return swapped_measurements, swapped_sensor_data
 
     def inject_adversarial(self, measurements, sensor_data):
-
-        #Refresh data structures
-        self.clearDict()
-        self.scsensors = {}
-        self.scsensors[self.player_id] = SCSensor()
-        self.scsensors[self.player_id].agent_type = 'player'
-        
-        #Delay attack modifies measurements and sensor_data to values from a previous frame
-        if self.config['time']['delay_attack'] == 1:
-            measurements, sensor_data = self.delay_attack(self.wait_counter, self.config['time']['nframes'], measurements, sensor_data) 
-        #Frame swap attack swaps measurements and sensor_data of adjacent frames
-        elif self.config['time']['frame_swap_attack'] == 1:
-            measurements, sensor_data = self.frame_swap_attack(self.wait_counter, self.config['time']['nframes'], measurements, sensor_data)
-        
-        #Inject noise into the player measurements
-	self.player_inject(measurements.player_measurements)
-        player_orientation = measurements.player_measurements.transform.rotation
-        self.scsensors[self.player_id].updateOrientation(player_orientation.pitch,
-                                                    player_orientation.yaw,
-                                                    player_orientation.roll)
-        self.log_measurements_csv(self.player_id, self.scsensors[self.player_id])
-
-        #Inject noise into agent measurements
-        for a in measurements.non_player_agents:
-            self.agent_inject(measurements.player_measurements, a.WhichOneof('agent'), a)
-        
-        logging.info("Adversarial Measurement Values:")
-        self.log_measurements(measurements)
-
-	sensor_data['CameraRGB'].raw_data = self.camera_attack.perform_attack(sensor_data['CameraRGB'])
 	
-	self.wait_counter = self.wait_counter + 1
-	print self.wait_counter
-	if self.wait_counter >= 20:
-		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_outputs/camera_outputs/test.png")
-		print("Done")
-		time.sleep(5)
+	if self.config['all']['user_defined_attack']:
+		#user defined functions
+		measurements, sensor_data = self.genericattack.perform_attack(measurements, sensor_data)
+	else:
+		#Refresh data structures
+		self.clearDict()
+		self.scsensors = {}
+		self.scsensors[self.player_id] = SCSensor()
+		self.scsensors[self.player_id].agent_type = 'player'
+		
+		#Delay attack modifies measurements and sensor_data to values from a previous frame
+		if self.config['time']['delay_attack'] == 1:
+		    measurements, sensor_data = self.delay_attack(self.wait_counter, self.config['time']['nframes'], measurements, sensor_data) 
+		#Frame swap attack swaps measurements and sensor_data of adjacent frames
+		elif self.config['time']['frame_swap_attack'] == 1:
+		    measurements, sensor_data = self.frame_swap_attack(self.wait_counter, self.config['time']['nframes'], measurements, sensor_data)
+		
+		#Inject noise into the player measurements
+		self.player_inject(measurements.player_measurements)
+		player_orientation = measurements.player_measurements.transform.rotation
+		self.scsensors[self.player_id].updateOrientation(player_orientation.pitch,
+		                                            player_orientation.yaw,
+		                                            player_orientation.roll)
+		self.log_measurements_csv(self.player_id, self.scsensors[self.player_id])
+
+		#Inject noise into agent measurements
+		for a in measurements.non_player_agents:
+		    self.agent_inject(measurements.player_measurements, a.WhichOneof('agent'), a)
+		
+		logging.info("Adversarial Measurement Values:")
+		self.log_measurements(measurements)
+
+		sensor_data['CameraRGB'].raw_data = self.camera_attack.perform_attack(sensor_data['CameraRGB'])
 	
-	self.step = self.step + 1
+		self.wait_counter = self.wait_counter + 1
+		print self.wait_counter
+		if self.wait_counter >= 20:
+			sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_outputs/camera_outputs/test.png")
+			print("Done")
+			time.sleep(5)
+	
+		self.step = self.step + 1
+
+	measurements, sensor_data = self.genericdefense.perform_defense(measurements, sensor_data)
         return measurements, sensor_data
 	
 
