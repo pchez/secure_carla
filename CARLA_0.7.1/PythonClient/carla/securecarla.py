@@ -113,10 +113,15 @@ class SecureCarla(object):
             config.read(config_file)
             
             for config_key in config.items():
+                
                 if config_key[0] == 'DEFAULT':
                     continue
                 config_params[config_key[0]] = dict(config.items(config_key[0]))
-                config_params[config_key[0]] = {key:float(val) for key, val in config_params[config_key[0]].items()}
+                for key,val in config_params[config_key[0]].items():
+                    if key == 'image_path' or key == 'use_attack_type':
+                        config_params[config_key[0]][key] = str(val)
+                    else:
+                        config_params[config_key[0]][key] = float(val)
             
             # Print configuration parameters loaded
             print('Finished loading configs:')
