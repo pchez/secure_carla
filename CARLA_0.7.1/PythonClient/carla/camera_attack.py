@@ -4,32 +4,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from . import sensor
+from warp_functions import *
 
 from skimage import data
 from skimage.transform import swirl
 from skimage import transform, data, io, filters
 import Image
 import time
-
-def fisheye(xy):
-    center = np.mean(xy, axis=0)
-    center = [400.0,200.0]
-    xc, yc = (xy - center).T
-
-    # Polar coordinates
-    r = np.sqrt(xc**2 + yc**2)
-    theta = np.arctan2(yc, xc)
-
-    #r = 0.8 * np.exp(r**(1/2.1) / 1.8)
-    #r = 4 * np.exp(r**(1/2.1) / 1.8) #reduces the effect 
-    #r = 2.1 * np.exp(r**(1/2.1) / 3.5) #level 1 
-    r = 2.1 * np.exp(r**(1/1.5)/11.3) #level 2
-    #r = 2.1 * np.exp(r**(1/3.0)/1.45) #level 3
-    #r = 2.1 * np.exp(r**(1/3.0)/1.2) #level 3
-
-    return np.column_stack((
-        r * np.cos(theta), r * np.sin(theta)
-        )) + center
 
 def noise_attack(image):
 	noise = np.random.randint(0,130,image.shape,dtype=np.dtype("uint8"))
@@ -104,11 +85,11 @@ def perform_attack(image):
 	perform_noise_attack = False 
 	perform_block_attack = False
 	perform_flip_attack = False
-	perform_warp_attack = False
+	perform_warp_attack = True
 	perform_colour_attack = False
 	perform_laser_attack = False 
 	perform_sticker_attack = False
-	perform_blur_attack = True
+	perform_blur_attack = False
 
 	width = image.width
 	height = image.height
@@ -124,10 +105,10 @@ def perform_attack(image):
 		image = block_attack(image)
 
 	if perform_flip_attack:
-		image = flip_attack(image)
+		image = flip_attack(image)'''
 	
 	if perform_warp_attack:
-		image = warp_attack(image)'''
+		image = warp_attack(image)
 
 	if perform_colour_attack:
 		image = colour_attack(image)
