@@ -25,7 +25,7 @@ import os.path
 import datetime
 import Queue
 from securecarlasensors import SCSensor
-
+from liveplotter import Plotter
 from collections import OrderedDict
 
 try:
@@ -43,8 +43,9 @@ class SecureCarla(object):
 	self.first_reading = True
 	self.past_player = None
         self.player_id = '00000000'
-
-	# Load variance, mean, and offset parameters here:
+        self.plotter = Plotter()
+        self.target_vehicle_id = 0
+        # Load variance, mean, and offset parameters here:
         # Parse config file if config file provided 
         if config_file is not None:
             self.config = self.parse_config(config_file)
@@ -317,6 +318,10 @@ class SecureCarla(object):
         if which_sensor is not None:
             self.speed_attack(this_config, agent.vehicle, agent.id)
             self.scsensors[agent.id].agent_type = agent_type
+            if self.target_vehicle_id == 0:
+                self.target_vehicle_id = agent.id
+            else:
+                self.plotter.setValues(self.scsensors[agent.id].true_distance, self.scsensors[agent.id].adversarial_distances[0])
     
     def pedestrian_inject(self, agent, agent_type, player):
         this_config = self.config['pedestrian']
