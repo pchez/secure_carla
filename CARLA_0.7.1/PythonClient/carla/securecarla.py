@@ -53,17 +53,29 @@ class SecureCarla(object):
         # self.scsensors holds SCSensor objects that are encountered by the player
 	# init an object for the player 
         self.scsensors = {}
-        self.scsensors[player_id] = SCSensor()
-        self._dict_distances = OrderedDict([('step', -1),
-				('src_node', -1),
-				('dest_node', -1),
-                                ('sensor', -1),
-                                ('noise_distance', -1),
-				('adversarial_distance', -1),
-				('true_distance', -1),
-                                ('noise_speed', -1),
-                                ('adversarial_speed', -1),
-                                ('true_speed', -1)
+        self.scsensors[self.player_id] = SCSensor()
+        self.scsensors[self.player_id].agent_type = 'player'
+
+        self._dict_distances = OrderedDict([('step', ''),
+				('src_node', ''),
+				('dest_node', ''),
+                                ('sensor', ''),
+                                ('agent_type', ''),
+                                ('noise_distance', ''),
+				('adversarial_distance', ''),
+				('true_distance', ''),
+                                ('noise_speed', ''),
+                                ('adversarial_speed', ''),
+                                ('true_speed', ''),
+                                ('true_accel_x', ''),
+                                ('true_accel_y', ''),
+                                ('true_accel_z', ''),
+                                ('adv_accel_x', ''),
+                                ('adv_accel_y', ''),
+                                ('adv_accel_z', ''),
+                                ('pitch', ''),
+                                ('yaw', ''),
+                                ('roll', '')
                                 ])
 	#for s in range(0,int(self.config['all']['num_sensors'])):
 	#	self._dict_distances['sensor{}'.format(s)] = -1
@@ -81,6 +93,9 @@ class SecureCarla(object):
                 rw.writeheader()
         return
         
+    def clearDict(self):
+        for key in self._dict_distances:
+            self._dict_distances[key] = ''
 
     def parse_config(self, config_file):
 
@@ -193,7 +208,8 @@ class SecureCarla(object):
             sensor_back: yaw - 180
             remember to convert to within 0-360
         """
-	if(distance < self.config['all']['distance_threshold']):
+	which_sensor = None
+        if(distance < self.config['all']['distance_threshold']):
             adversarial_distances = []
             noise_distances = []
             
@@ -226,7 +242,9 @@ class SecureCarla(object):
                 self.scsensors[agent_id] = SCSensor()
                 self.scsensors[agent_id].updateDistances(distance, noise_distances, adversarial_distances)
                 self.scsensors[agent_id].setDistanceSensor(which_sensor)
-    
+        return which_sensor
+        
+
     # Modifies the accel value of the agent/player with noise and attack
     def accel_attack(self, this_config, agent, agent_id):
         use_gaussian = int(this_config['use_gaussian_noise'])
@@ -280,34 +298,44 @@ class SecureCarla(object):
         self.scsensors[agent_id].updateSpeeds(true_speed, noise_speed, adversarial_speed)
         agent.forward_speed = adversarial_speed
 
-    def traffic_light_inject(self, agent, player):
+    def traffic_light_inject(self, agent, agent_type, player):
         this_config = self.config['trafficlight']
-	self.distance_threshold_attack(this_config, agent.traffic_light, agent.id, player)
+        which_sensor = self.distance_threshold_attack(this_config, agent.traffic_light, agent.id, player)
+        if which_sensor is not None:
+            self.scsensors[agent.id].agent_type = agent_type
 
-    def speed_limit_sign_inject(self, agent, player):
+    def speed_limit_sign_inject(self, agent, agent_type, player):
         this_config = self.config['speedlimit']
-	self.distance_threshold_attack(this_config, agent.speed_limit_sign, agent.id, player)
-
-    def vehicle_inject(self, agent, player):
+	which_sensor = self.distance_threshold_attack(this_config, agent.speed_limit_sign, agent.id, player)
+        if which_sensor is not None:
+            self.scsensors[agent.id].agent_type = agent_type
+    
+    def vehicle_inject(self, agent, agent_type, player):
         this_config = self.config['vehicle']
-	self.distance_threshold_attack(this_config, agent.vehicle, agent.id, player)
-	self.speed_attack(this_config, agent.vehicle, agent.id)
-
-    def pedestrian_inject(self, agent, player):
+	which_sensor = self.distance_threshold_attack(this_config, agent.vehicle, agent.id, player)
+	# Only need to launch speed attack if vehicle within sensor bounds
+        if which_sensor is not None:
+            self.speed_attack(this_config, agent.vehicle, agent.id)
+            self.scsensors[agent.id].agent_type = agent_type
+    
+    def pedestrian_inject(self, agent, agent_type, player):
         this_config = self.config['pedestrian']
-	self.distance_threshold_attack(this_config, agent.pedestrian, agent.id, player)
-	self.speed_attack(this_config, agent.pedestrian, agent.id)
+	which_sensor = self.distance_threshold_attack(this_config, agent.pedestrian, agent.id, player)
+	# Only need to launch speed attack if vehicle within sensor bounds
+        if which_sensor is not None:
+            self.speed_attack(this_config, agent.pedestrian, agent.id)
+            self.scsensors[agent.id].agent_type = agent_type
 
     def agent_inject(self, player, agent_type, agent):
 
         if(agent_type == 'traffic_light'):
-		self.traffic_light_inject(agent, player)
+		self.traffic_light_inject(agent, agent_type, player)
 	elif(agent_type == 'speed_limit_sign'):
-		self.speed_limit_sign_inject(agent, player)
+		self.speed_limit_sign_inject(agent, agent_type, player)
 	elif(agent_type == 'vehicle'):
-		self.vehicle_inject(agent, player)
+		self.vehicle_inject(agent, agent_type, player)
 	elif(agent_type == 'pedestrian'):
-		self.pedestrian_inject(agent, player)
+		self.pedestrian_inject(agent, agent_type, player)
 	#agents ={
 	#	'traffic_light' : self.traffic_light_inject(agent),
 	#	'speed_limit_sign' : self.speed_limit_sign_inject(agent),
@@ -324,17 +352,10 @@ class SecureCarla(object):
     def log_measurements(self, measurements):
         #logging.info('Player speed = %f ',measurements.player_measurements.forward_speed)
         #logging.info('Player accel = %f ',measurements.player_measurements.acceleration.x)
-        player_orientation = measurements.player_measurements.transform.rotation
-        logging.info('Player pitch = %f ',player_orientation.pitch)
-        logging.info('Player yaw = %f ',player_orientation.yaw)
-        logging.info('Player roll = %f ',player_orientation.roll)
+        #logging.info('Player pitch = %f ',player_orientation.pitch)
+        #logging.info('Player yaw = %f ',player_orientation.yaw)
+        #logging.info('Player roll = %f ',player_orientation.roll)
         
-        # Logging for player
-        self.scsensors[player_id].updateOrientation(player_orientation.pitch,
-                                                    player_orientation.yaw,
-                                                    player_orientation.roll)
-	self.log_measurements_csv(player_id, self.scsensors[player_id])
-
         # Logging for agents 
         for i,agent_id in enumerate(self.scsensors.keys()):
             #self.agent_num = self.agent_num +1
@@ -345,6 +366,8 @@ class SecureCarla(object):
             #logging.info('vehicle z = %f ', a.vehicle.transform.location.z)
             # Only print distance values if attack already launched and new distances have
             # already been stored in true_distances and adversarial_distances
+            if agent_id == self.player_id:
+                continue
             self.log_measurements_csv(agent_id, self.scsensors[agent_id])
             
             #logging.info('true distance to agent: %f', self.true_distances[agent_id])
@@ -369,8 +392,10 @@ class SecureCarla(object):
         
         # Parameters that can be reported for both agents and player
 	self._dict_distances['step'] = self.step
+        self._dict_distances['agent_type'] = scsensor.agent_type
         self._dict_distances['noise_speed'] = scsensor.noise_speed
         self._dict_distances['adversarial_speed'] = scsensor.adversarial_speed
+        self._dict_distances['agent_type'] = scsensor.agent_type
         self._dict_distances['true_speed'] = scsensor.true_speed
         
         self._dict_distances['true_accel_x'] = scsensor.true_accel_x
@@ -431,9 +456,12 @@ class SecureCarla(object):
 
     def inject_adversarial(self, measurements, sensor_data):
 
-        #logging.info("Measurement Values:")
-        #self.log_measurements(measurements)
-	
+        #Refresh data structures
+        self.clearDict()
+        self.scsensors = {}
+        self.scsensors[self.player_id] = SCSensor()
+        self.scsensors[self.player_id].agent_type = 'player'
+        
         #Delay attack modifies measurements and sensor_data to values from a previous frame
         if self.config['time']['delay_attack'] == 1:
             measurements, sensor_data = self.delay_attack(self.wait_counter, self.config['time']['nframes'], measurements, sensor_data) 
@@ -443,7 +471,12 @@ class SecureCarla(object):
         
         #Inject noise into the player measurements
 	self.player_inject(measurements.player_measurements)
-        
+        player_orientation = measurements.player_measurements.transform.rotation
+        self.scsensors[self.player_id].updateOrientation(player_orientation.pitch,
+                                                    player_orientation.yaw,
+                                                    player_orientation.roll)
+        self.log_measurements_csv(self.player_id, self.scsensors[self.player_id])
+
         #Inject noise into agent measurements
         for a in measurements.non_player_agents:
             self.agent_inject(measurements.player_measurements, a.WhichOneof('agent'), a)
