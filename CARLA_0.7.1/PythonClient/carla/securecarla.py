@@ -35,7 +35,7 @@ except ImportError:
 
 
 class SecureCarla(object):
-    def __init__(self, config_file=None):
+    def __init__(self, config_file=None, config_camera=None):
 	self.wait_counter = 0
 	self.step = 0
 	self.output_time = datetime.datetime.now()
@@ -49,7 +49,9 @@ class SecureCarla(object):
         # Parse config file if config file provided 
         if config_file is not None:
             self.config = self.parse_config(config_file)
-	self.csv_file = '../../securecarla_details.csv'
+        if config_camera is not None:
+            self.config_camera = self.parse_config(config_camera)
+        self.csv_file = '../../securecarla_details.csv'
 
         # self.scsensors holds SCSensor objects that are encountered by the player
 	# init an object for the player 
