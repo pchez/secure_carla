@@ -7,8 +7,9 @@ from . import sensor
 
 from skimage import data
 from skimage.transform import swirl
-from skimage import transform, data, io
+from skimage import transform, data, io, filters
 import Image
+import time
 
 def fisheye(xy):
     center = np.mean(xy, axis=0)
@@ -51,7 +52,7 @@ def warp_attack(image):
 
 def colour_attack(image):
 	tmp_array = np.zeros(image.shape, dtype="uint8")
-	tmp_array[:,:,0] = image[:,:,0]
+	tmp_array[:,:,3] = image[:,:,3]
 	image = tmp_array
 	return image
 
@@ -78,13 +79,36 @@ def laser_attack(image):
 
 	return combined
 
+def sticker_attack(image):
+	foreground = Image.open("/home/carla/Downloads/cutout.png")
+	foreground = np.array(foreground)
+	foreground = Image.fromarray(foreground)
+
+	background = Image.fromarray(image)
+	background = background.convert('RGBA')
+	combined = Image.new('RGBA',background.size)
+	combined = Image.alpha_composite(combined,background)
+	combined = Image.alpha_composite(combined,foreground)
+	combined = np.array(combined)	
+
+	return combined	
+
+def blur_attack(image):
+	image = filters.gaussian(image, sigma =10, multichannel=True)
+	image = image*255
+	image = image.astype("uint8")
+	return image
+
+
 def perform_attack(image):
 	perform_noise_attack = False 
 	perform_block_attack = False
 	perform_flip_attack = False
-	perform_warp_attack =  False
+	perform_warp_attack = False
 	perform_colour_attack = False
-	perform_laser_attack = True
+	perform_laser_attack = False 
+	perform_sticker_attack = False
+	perform_blur_attack = True
 
 	width = image.width
 	height = image.height
@@ -93,7 +117,7 @@ def perform_attack(image):
 	image = np.reshape(image, (height, width, 4))
 	image.setflags(write=1)
 
-	if perform_noise_attack:
+	'''if perform_noise_attack:
 		image = noise_attack(image)
 
 	if perform_block_attack: 
@@ -103,13 +127,19 @@ def perform_attack(image):
 		image = flip_attack(image)
 	
 	if perform_warp_attack:
-		image = warp_attack(image)
+		image = warp_attack(image)'''
 
 	if perform_colour_attack:
 		image = colour_attack(image)
 
 	if perform_laser_attack:
 		image = laser_attack(image)
+	
+	if perform_sticker_attack:
+		image = sticker_attack(image)
+
+	if perform_blur_attack:
+		image = blur_attack(image)
 
 	#Serialize the data
 	image = np.reshape(image, (height*width*4))
