@@ -14,7 +14,7 @@ from . import settings
 from . import tcp
 from . import util
 from . import image_converter
-from . import camera_attack
+from .camera_attack import CameraAttack
 import csv
 import logging
 import numpy as np
@@ -52,6 +52,9 @@ class SecureCarla(object):
         if config_camera is not None:
             self.config_camera = self.parse_config(config_camera)
         self.csv_file = '../../securecarla_details.csv'
+	
+
+	self.camera_attack = CameraAttack(self.config_camera)
 
         # self.scsensors holds SCSensor objects that are encountered by the player
 	# init an object for the player 
@@ -496,12 +499,12 @@ class SecureCarla(object):
         logging.info("Adversarial Measurement Values:")
         self.log_measurements(measurements)
 
-#	sensor_data['CameraRGB'].raw_data = camera_attack.perform_attack(sensor_data['CameraRGB'])
+	sensor_data['CameraRGB'].raw_data = self.camera_attack.perform_attack(sensor_data['CameraRGB'])
 	
-	#self.wait_counter = self.wait_counter + 1
-	#print self.wait_counter
-	if self.wait_counter >= 80:
-		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_outputs/camera_outputs/pedestrian.png")
+	self.wait_counter = self.wait_counter + 1
+	print self.wait_counter
+	if self.wait_counter >= 20:
+		sensor_data['CameraRGB'].save_to_disk("/home/carla/Documents/carla_outputs/camera_outputs/test.png")
 		print("Done")
 		time.sleep(5)
 	

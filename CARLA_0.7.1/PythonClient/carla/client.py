@@ -42,7 +42,7 @@ class CarlaClient(object):
         self._current_settings = None
         self._is_episode_requested = False
         self._sensor_names = []
-	self._secure_carla = SecureCarla('../../config_attack.ini')
+	self._secure_carla = SecureCarla('../../config_attack.ini', '../../config_cam_attack.ini')
 	#self._secure_carla = SecureCarla()
 
     def connect(self, connection_attempts=10):
